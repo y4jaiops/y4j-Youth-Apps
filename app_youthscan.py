@@ -107,11 +107,11 @@ if st.session_state["scanned_df"] is not None:
     
     col1, col2 = st.columns([3, 1])
     with col1:
-        sheet_name = st.text_input("Target Sheet", value="YouthScan_Data")
+        sheet_name = st.text_input("Saving/Appending to Google Sheet: Edit sheet name below", value="YouthScan_Data")
     with col2:
         st.write("")
         st.write("")
-        if st.button("💾 Save to Cloud"):
+        if st.button("💾 Save to My Drive/y4j-Youth-Apps-file-store/y4j-YouthScan folder"):
             with st.spinner("Saving..."):
                 fid = st.secrets.get("youthscan", {}).get("folder_id")
                 url = get_or_create_spreadsheet(sheet_name, fid)
