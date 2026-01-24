@@ -1,4 +1,4 @@
-# Handles the colors and icons for the 5 apps.
+# (The Vibe Manager) Handles the colors and icons for the 5 apps.
 import streamlit as st
 
 THEMES = {
