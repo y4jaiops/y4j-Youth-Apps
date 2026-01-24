@@ -18,8 +18,8 @@ def parse_document_dynamic(file_bytes, target_columns, mime_type, prompt_context
     if not configure_gemini():
         return [{"error": "Gemini API Key missing"}]
 
-    model = genai.GenerativeModel('gemini-2.5-flash')
-    
+    model = genai.GenerativeModel('gemini-3-flash-preview')
+# was gemini-2.5-flash
     # --- 📝 UPDATED PROMPT WITH TRANSLATION RULES ---
     prompt = f"""
     You are an expert data entry assistant for the Youth4Jobs Foundation.
