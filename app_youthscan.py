@@ -1,6 +1,7 @@
 # app_youthscan.py (The Orange App 🟠)
 import streamlit as st
 import pandas as pd
+import time # Import time for a small delay effect
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
 from logic.logic_drive import get_file_from_link
@@ -18,14 +19,12 @@ if "scanned_df" not in st.session_state:
     st.session_state["scanned_df"] = None
 if "input_mode" not in st.session_state:
     st.session_state["input_mode"] = "upload"
-# NEW: Persistent storage for the file itself
 if "active_file" not in st.session_state:
     st.session_state["active_file"] = {"data": None, "mime": None}
 
 # 2. HELPER: RESET STATE
 def switch_mode(new_mode):
     st.session_state["input_mode"] = new_mode
-    # Clear previous file when switching modes
     st.session_state["active_file"] = {"data": None, "mime": None}
     st.session_state["scanned_df"] = None
 
@@ -36,10 +35,8 @@ with col_nav:
     st.info("Select Source:")
     if st.button("📂 Upload Phone/PDF", use_container_width=True):
         switch_mode("upload")
-    
     if st.button("🔗 Google Drive", use_container_width=True):
         switch_mode("drive")
-        
     if st.button("📸 Camera", use_container_width=True):
         switch_mode("camera")
 
@@ -48,38 +45,29 @@ with col_content:
     mode = st.session_state["input_mode"]
     st.subheader(f"Mode: {mode.title()}")
 
-    # --- MODE 1: UPLOAD ---
     if mode == "upload":
         up = st.file_uploader("Select file", type=["jpg", "png", "jpeg", "pdf"], key="u_widget")
-        if up:
-            st.session_state["active_file"] = {"data": up.getvalue(), "mime": up.type}
+        if up: st.session_state["active_file"] = {"data": up.getvalue(), "mime": up.type}
 
-    # --- MODE 2: CAMERA ---
     elif mode == "camera":
         cam = st.camera_input("Take Photo")
-        if cam:
-            st.session_state["active_file"] = {"data": cam.getvalue(), "mime": "image/jpeg"}
+        if cam: st.session_state["active_file"] = {"data": cam.getvalue(), "mime": "image/jpeg"}
 
-    # --- MODE 3: DRIVE (The tricky one) ---
     elif mode == "drive":
         st.info("Paste a link to a file (not a folder) from Google Drive.")
         link = st.text_input("Google Drive Link")
         if link and st.button("Fetch from Drive"):
             data, mime, err = get_file_from_link(link)
-            if err:
-                st.error(err)
+            if err: st.error(err)
             else:
-                st.success("✅ File Loaded! You can now analyze it.")
-                # SAVE TO STATE immediately
+                st.success("✅ File Loaded!")
                 st.session_state["active_file"] = {"data": data, "mime": mime}
 
-# 5. PROCESSING (Uses the persistent state)
+# 5. PROCESSING
 active_file = st.session_state["active_file"]
 
 if active_file["data"] is not None:
     st.divider()
-    
-    # Preview
     if "image" in active_file["mime"]:
         st.image(active_file["data"], width=300)
     else:
@@ -88,22 +76,13 @@ if active_file["data"] is not None:
     default_cols = "First Name, Last Name, Email, Phone, Disability Type, Education, State"
     cols = st.text_area("Fields to Extract", value=default_cols).split(",")
     
-    # --- THE ANALYZE BUTTON ---
     if st.button("🚀 Analyze with Gemini", type="primary"):
-        with st.spinner("Gemini is reading the document..."):
-            result = parse_document_dynamic(
-                active_file["data"], 
-                cols, 
-                active_file["mime"], 
-                prompt_context="Youth Candidate Resume/ID"
-            )
-            
-            if "error" in result[0]:
-                st.error(result[0]["error"])
-            else:
-                st.session_state["scanned_df"] = pd.DataFrame(result)
+        with st.spinner("Gemini is reading..."):
+            result = parse_document_dynamic(active_file["data"], cols, active_file["mime"], prompt_context="Youth Candidate Resume/ID")
+            if "error" in result[0]: st.error(result[0]["error"])
+            else: st.session_state["scanned_df"] = pd.DataFrame(result)
 
-# 6. SAVE SECTION (Outside the Analyze loop)
+# 6. SAVE SECTION (With Auto-Clear)
 if st.session_state["scanned_df"] is not None:
     st.divider()
     st.subheader("Verify & Save")
@@ -121,5 +100,11 @@ if st.session_state["scanned_df"] is not None:
                 fid = st.secrets.get("youthscan", {}).get("folder_id")
                 url = get_or_create_spreadsheet(sheet_name, fid)
                 if url and append_batch_to_sheet(url, edited_df.to_dict('records')):
-                    st.success("✅ Saved!")
+                    st.success("✅ Saved successfully!")
                     st.balloons()
+                    
+                    # --- 🧹 THE CLEANUP LOGIC ---
+                    time.sleep(2) # Wait 2 seconds so user sees the success message
+                    st.session_state["scanned_df"] = None # Clear the data
+                    st.session_state["active_file"] = {"data": None, "mime": None} # Optional: Clear image too
+                    st.rerun() # Force app to reload from top
