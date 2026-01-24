@@ -9,10 +9,14 @@ from logic.logic_gemini import parse_document_dynamic
 from logic.logic_sheets import get_or_create_spreadsheet, append_batch_to_sheet
 
 # 1. SETUP
-set_app_theme("scan") # 🟠 Orange Vibe
-user = login_required() # 🔒 Gatekeeper
+set_app_theme("scan")
+user = login_required()
 
 st.write(f"👋 Hi **{user['name']}**! Ready to scan candidates?")
+
+# --- SESSION STATE INITIALIZATION ---
+if "scanned_df" not in st.session_state:
+    st.session_state["scanned_df"] = None
 
 # 2. INPUTS
 tab1, tab2 = st.tabs(["📸 Camera / Upload", "🔗 Drive Link"])
@@ -36,26 +40,50 @@ with tab2:
 
 # 3. PROCESSING
 if file_bytes:
-    # Config
     default_cols = "First Name, Last Name, Email, Phone, Disability Type, Education, State"
     cols = st.text_area("Fields to Extract", value=default_cols).split(",")
     
+    # ACTION: SCAN
     if st.button("🚀 Scan Document"):
         with st.spinner("AI is reading..."):
-            # Call Gemini
             data = parse_document_dynamic(file_bytes, cols, mime, prompt_context="Youth Candidate Resume/ID")
             
             if "error" in data[0]:
                 st.error(data[0]["error"])
             else:
-                df = pd.DataFrame(data)
-                st.data_editor(df, num_rows="dynamic", key="editor")
-                
-                # Save Logic
-                target_sheet = st.text_input("Sheet Name", value="YouthScan_Data")
-                if st.button("💾 Save to Cloud"):
-                    # Get Folder ID from secrets (or use default)
-                    folder_id = st.secrets.get("youthscan", {}).get("folder_id")
-                    url = get_or_create_spreadsheet(target_sheet, folder_id)
-                    if url and append_batch_to_sheet(url, df.to_dict('records')):
-                        st.success("✅ Saved successfully!")
+                # SAVE TO SESSION STATE (Persist the data!)
+                st.session_state["scanned_df"] = pd.DataFrame(data)
+
+# 4. REVIEW & SAVE (Outside the Scan Button)
+if st.session_state["scanned_df"] is not None:
+    st.divider()
+    st.subheader("Verify Data")
+    
+    # Allow editing the persistent data
+    edited_df = st.data_editor(
+        st.session_state["scanned_df"], 
+        num_rows="dynamic", 
+        key="editor"
+    )
+    
+    target_sheet = st.text_input("Sheet Name", value="YouthScan_Data")
+    
+    # ACTION: SAVE
+    if st.button("💾 Save to Cloud"):
+        with st.spinner("Saving to Google Drive..."):
+            folder_id = st.secrets.get("youthscan", {}).get("folder_id")
+            
+            # 1. Get/Create Sheet
+            url = get_or_create_spreadsheet(target_sheet, folder_id)
+            
+            if url:
+                # 2. Append Data
+                data_to_save = edited_df.to_dict('records')
+                if append_batch_to_sheet(url, data_to_save):
+                    st.success("✅ Saved successfully!")
+                    st.balloons()
+                    # Optional: Clear data after save
+                    # st.session_state["scanned_df"] = None 
+                    # st.rerun()
+            else:
+                st.error("Failed to create spreadsheet. Check permissions.")
