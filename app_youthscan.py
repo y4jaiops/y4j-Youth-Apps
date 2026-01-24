@@ -19,8 +19,8 @@ if "scanned_df" not in st.session_state:
 
 # 2. INPUTS (Reordered: Phone Upload -> Drive -> Camera)
 tab_up, tab_link, tab_cam = st.tabs([
-    "📂 Upload PDF file or photo from phone", 
-    "🔗 Upload PDF file or photo from Google Drive", 
+    "📂 Scan PDF/Photo from phone", 
+    "🔗 Scan PDF/Photo from Google Drive", 
     "📸 Camera"
 ])
 
