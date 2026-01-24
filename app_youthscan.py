@@ -70,7 +70,7 @@ with col_content:
 
     elif mode == "drive":
         st.info("Paste a link below to a file (not a folder) from Google Drive.")
-        link = st.text_input("Google Drive Link")
+        link = st.text_input("Google Drive Link below this line:")
         if link and st.button("Fetch from Drive"):
             data, mime, err = get_file_from_link(link)
             if err: st.error(err)
