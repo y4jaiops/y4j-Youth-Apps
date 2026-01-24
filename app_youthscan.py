@@ -21,7 +21,7 @@ if "scanned_df" not in st.session_state:
 tab_up, tab_link, tab_cam = st.tabs([
     "📂 Scan PDF/Photo from phone", 
     "🔗 Scan PDF/Photo from Google Drive", 
-    "📸 Camera"
+    "📸 Scan using Camera"
 ])
 
 file_bytes = None
