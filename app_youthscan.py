@@ -44,11 +44,11 @@ col_nav, col_content = st.columns([1, 3])
 with col_nav:
     st.info("Select Source for Document to scan:")
     if st.button("📂 Scan Photo/PDF stored on phone/computer", use_container_width=True):
-        switch_mode("upload")
+        switch_mode("Browse from phone/computer")
     if st.button("🔗 Scan Photo/PDF from Google Drive", use_container_width=True):
-        switch_mode("drive")
+        switch_mode("Download from Google drive")
     if st.button("📸 Scan with new photo from Camera", use_container_width=True):
-        switch_mode("camera")
+        switch_mode("Take photo from camera")
 
 # 4. INPUT LOGIC
 with col_content:
@@ -69,7 +69,7 @@ with col_content:
         if cam: st.session_state["active_file"] = {"data": cam.getvalue(), "mime": "image/jpeg"}
 
     elif mode == "drive":
-        st.info("Paste a link to a file (not a folder) from Google Drive.")
+        st.info("Paste a link below to a file (not a folder) from Google Drive.")
         link = st.text_input("Google Drive Link")
         if link and st.button("Fetch from Drive"):
             data, mime, err = get_file_from_link(link)
