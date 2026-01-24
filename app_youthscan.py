@@ -42,12 +42,12 @@ def full_reset():
 col_nav, col_content = st.columns([1, 3])
 
 with col_nav:
-    st.info("Select Source:")
-    if st.button("📂 Upload Phone/PDF", use_container_width=True):
+    st.info("Select Source for Document to scan:")
+    if st.button("📂 Scan Photo/PDF stored on phone/computer", use_container_width=True):
         switch_mode("upload")
-    if st.button("🔗 Google Drive", use_container_width=True):
+    if st.button("🔗 Scan Photo/PDF from Google Drive", use_container_width=True):
         switch_mode("drive")
-    if st.button("📸 Camera", use_container_width=True):
+    if st.button("📸 Scan with new photo from Camera", use_container_width=True):
         switch_mode("camera")
 
 # 4. INPUT LOGIC
