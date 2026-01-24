@@ -88,7 +88,8 @@ if active_file["data"] is not None:
     else:
         st.markdown(f"**📄 Document Loaded: {active_file['mime']}**")
     
-    default_cols = "First Name, Last Name, Email, Phone, Disability Type, Education, State"
+    default_cols = "First Name,	Last Name,	ID Type,	ID Number,	Email,	Phone Number,	Date Of Birth,	Gender,	Disability Type,	Qualification,	State"
+
     cols = st.text_area("Fields to Extract", value=default_cols).split(",")
     
     if st.button("🚀 Analyze with Gemini", type="primary"):
