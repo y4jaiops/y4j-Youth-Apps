@@ -17,28 +17,24 @@ st.write(f"👋 Hi **{user['name']}**! Ready to scan candidates?")
 if "scanned_df" not in st.session_state:
     st.session_state["scanned_df"] = None
 
-# 2. INPUTS (Now with 3 Explicit Tabs)
-# This prevents the camera from turning on unless Tab 1 is clicked.
-tab_cam, tab_up, tab_link = st.tabs(["📸 Camera", "📂 Upload File", "🔗 Drive Link"])
+# 2. INPUTS (Reordered: Phone Upload -> Drive -> Camera)
+tab_up, tab_link, tab_cam = st.tabs([
+    "📂 Upload PDF file or photo from phone", 
+    "🔗 Upload PDF file or photo from Google Drive", 
+    "📸 Camera"
+])
 
 file_bytes = None
 mime = "image/jpeg"
 
-# --- TAB 1: CAMERA ---
-with tab_cam:
-    cam = st.camera_input("Take Photo of ID/Resume")
-    if cam:
-        file_bytes = cam.getvalue()
-        mime = "image/jpeg"
-
-# --- TAB 2: UPLOAD ---
+# --- TAB 1: PHONE UPLOAD ---
 with tab_up:
-    up = st.file_uploader("Upload Image or PDF", type=["jpg", "png", "jpeg", "pdf"])
+    up = st.file_uploader("Select file", type=["jpg", "png", "jpeg", "pdf"], key="file_upload_widget")
     if up:
         file_bytes = up.getvalue()
         mime = up.type
 
-# --- TAB 3: DRIVE LINK ---
+# --- TAB 2: GOOGLE DRIVE ---
 with tab_link:
     st.info("Paste a link to a file (not a folder) from Google Drive.")
     link = st.text_input("Google Drive Link")
@@ -49,6 +45,13 @@ with tab_link:
             file_bytes = None # Reset on error
         else: 
             st.success("✅ File Loaded Successfully!")
+
+# --- TAB 3: CAMERA ---
+with tab_cam:
+    cam = st.camera_input("Take Photo of ID/Resume")
+    if cam:
+        file_bytes = cam.getvalue()
+        mime = "image/jpeg"
 
 # 3. PROCESSING
 if file_bytes:
@@ -84,7 +87,6 @@ if st.session_state["scanned_df"] is not None:
     with col1:
         target_sheet = st.text_input("Sheet Name", value="YouthScan_Data")
     with col2:
-        # Spacer to align button
         st.write("") 
         st.write("")
         save_btn = st.button("💾 Save to Cloud")
