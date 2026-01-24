@@ -1,4 +1,4 @@
-# Handles Login/Logout common to all apps.
+# (The Gatekeeper) Handles Login/Logout common to all apps.
 
 import streamlit as st
 import os
