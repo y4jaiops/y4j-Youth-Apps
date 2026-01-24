@@ -55,7 +55,7 @@ with col_content:
     mode = st.session_state["input_mode"]
     st.subheader(f"Mode: {mode.title()}")
 
-    if mode == "upload":
+    if mode == "Browse from phone/computer":
         # We use the dynamic key here. When it changes, this widget is destroyed and recreated empty.
         up = st.file_uploader(
             "Select file", 
@@ -64,11 +64,11 @@ with col_content:
         )
         if up: st.session_state["active_file"] = {"data": up.getvalue(), "mime": up.type}
 
-    elif mode == "camera":
+    elif mode == "Take photo from camera":
         cam = st.camera_input("Take Photo")
         if cam: st.session_state["active_file"] = {"data": cam.getvalue(), "mime": "image/jpeg"}
 
-    elif mode == "drive":
+    elif mode == "Download from Google drive":
         st.info("Paste a link below to a file (not a folder) from Google Drive.")
         link = st.text_input("Google Drive Link below this line:")
         if link and st.button("Fetch from Drive"):
