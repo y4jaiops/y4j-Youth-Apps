@@ -1,7 +1,7 @@
 # app_youthscan.py (The Orange App 🟠)
 import streamlit as st
 import pandas as pd
-import time # Import time for a small delay effect
+import time
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
 from logic.logic_drive import get_file_from_link
@@ -21,13 +21,23 @@ if "input_mode" not in st.session_state:
     st.session_state["input_mode"] = "upload"
 if "active_file" not in st.session_state:
     st.session_state["active_file"] = {"data": None, "mime": None}
+# NEW: Key to force-clear the uploader widget
+if "uploader_key" not in st.session_state:
+    st.session_state["uploader_key"] = 0
 
 # 2. HELPER: RESET STATE
 def switch_mode(new_mode):
     st.session_state["input_mode"] = new_mode
     st.session_state["active_file"] = {"data": None, "mime": None}
     st.session_state["scanned_df"] = None
-
+    # Don't increment uploader key here, only on save/clear
+    
+def full_reset():
+    """Clears everything including the file uploader widget"""
+    st.session_state["scanned_df"] = None
+    st.session_state["active_file"] = {"data": None, "mime": None}
+    st.session_state["uploader_key"] += 1 # <--- This wipes the uploader
+    
 # 3. LAYOUT
 col_nav, col_content = st.columns([1, 3])
 
@@ -46,7 +56,12 @@ with col_content:
     st.subheader(f"Mode: {mode.title()}")
 
     if mode == "upload":
-        up = st.file_uploader("Select file", type=["jpg", "png", "jpeg", "pdf"], key="u_widget")
+        # We use the dynamic key here. When it changes, this widget is destroyed and recreated empty.
+        up = st.file_uploader(
+            "Select file", 
+            type=["jpg", "png", "jpeg", "pdf"], 
+            key=f"u_widget_{st.session_state['uploader_key']}" 
+        )
         if up: st.session_state["active_file"] = {"data": up.getvalue(), "mime": up.type}
 
     elif mode == "camera":
@@ -73,9 +88,7 @@ if active_file["data"] is not None:
     else:
         st.markdown(f"**📄 Document Loaded: {active_file['mime']}**")
     
-#default_cols = "First Name, Last Name, Email, Phone, Disability Type, Education, State"
-    
-    default_cols = "First Name,	Last Name,	ID Type,	ID Number,	Email,	Phone Number,	Date Of Birth,	Gender,	Disability Type,	Qualification,	State"
+    default_cols = "First Name, Last Name, Email, Phone, Disability Type, Education, State"
     cols = st.text_area("Fields to Extract", value=default_cols).split(",")
     
     if st.button("🚀 Analyze with Gemini", type="primary"):
@@ -84,7 +97,7 @@ if active_file["data"] is not None:
             if "error" in result[0]: st.error(result[0]["error"])
             else: st.session_state["scanned_df"] = pd.DataFrame(result)
 
-# 6. SAVE SECTION (With Auto-Clear)
+# 6. SAVE SECTION
 if st.session_state["scanned_df"] is not None:
     st.divider()
     st.subheader("Verify & Save")
@@ -106,7 +119,6 @@ if st.session_state["scanned_df"] is not None:
                     st.balloons()
                     
                     # --- 🧹 THE CLEANUP LOGIC ---
-                    time.sleep(2) # Wait 2 seconds so user sees the success message
-                    st.session_state["scanned_df"] = None # Clear the data
-                    st.session_state["active_file"] = {"data": None, "mime": None} # Optional: Clear image too
-                    st.rerun() # Force app to reload from top
+                    time.sleep(2) 
+                    full_reset() # This now rotates the key
+                    st.rerun()
