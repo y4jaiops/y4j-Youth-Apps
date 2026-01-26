@@ -17,6 +17,19 @@ st.write(f"Logged in as: **{user['name']}**")
 SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" # <--- PASTE YOUR LINK HERE
 
 # 2. LOAD DATA
+#@st.cache_data(ttl=60)
+#def load_candidates():
+#   fid = st.secrets.get("youthscan", {}).get("folder_id")
+#   url = get_or_create_spreadsheet("YouthScan_Data", fid)
+#   
+#   if url:
+#       data = read_data_from_sheet(url)
+#       if data:
+#           return pd.DataFrame(data), url
+#           
+#   return pd.DataFrame(), url
+
+# 2. LOAD DATA
 @st.cache_data(ttl=60)
 def load_candidates():
     fid = st.secrets.get("youthscan", {}).get("folder_id")
@@ -25,7 +38,14 @@ def load_candidates():
     if url:
         data = read_data_from_sheet(url)
         if data:
-            return pd.DataFrame(data), url
+            df = pd.DataFrame(data)
+            
+            # --- THE FIX: FORCE PHONE NUMBER TO STRING ---
+            # This makes the phone column editable as text
+            if 'Phone Number' in df.columns:
+                df['Phone Number'] = df['Phone Number'].astype(str).replace('nan', '')
+                
+            return df, url
             
     return pd.DataFrame(), url
 
