@@ -14,7 +14,7 @@ st.title("🔵 YouthProfile Manager")
 st.write(f"Logged in as: **{user['name']}**")
 
 # --- CONFIGURATION ---
-SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" # <--- PASTE YOUR LINK HERE
+SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" 
 
 # 2. LOAD DATA
 @st.cache_data(ttl=60)
@@ -26,12 +26,9 @@ def load_candidates():
         data = read_data_from_sheet(url)
         if data:
             df = pd.DataFrame(data)
-            
-            # --- THE FIX: FORCE PHONE NUMBER TO STRING ---
-            # This makes the phone column editable as text
+            # Ensure phone is string in the dataframe
             if 'Phone Number' in df.columns:
                 df['Phone Number'] = df['Phone Number'].astype(str).replace('nan', '')
-            
             return df, url
             
     return pd.DataFrame(), url
@@ -72,11 +69,20 @@ else:
     if action_mode == "Edit Data":
         st.caption("📝 **Edit Mode:** Double-click cells to fix typos. Click Save below.")
         
+        # --- THE FIX IS HERE ---
+        # We explicitly tell Streamlit: "Render 'Phone Number' as a Text Column, not a Number."
         edited_df = st.data_editor(
             df_display, 
             num_rows="dynamic", 
             use_container_width=True,
-            key="profile_editor"
+            key="profile_editor",
+            column_config={
+                "Phone Number": st.column_config.TextColumn(
+                    "Phone Number",
+                    help="Enter phone number (Text allowed)",
+                    validate=None # Allows any character
+                )
+            }
         )
 
         st.write("")
@@ -94,14 +100,12 @@ else:
                         else:
                             st.error("❌ Save Failed.")
     
-    # --- MODE 2: SEND SURVEY (EMAIL ONLY) ---
+    # --- MODE 2: SEND SURVEY ---
     elif action_mode == "Send Survey":
         st.caption("📧 **Survey Mode:** Select a candidate to draft an email with the survey link.")
         
         # We use a dataframe with a selection checkbox
-        # We only show key columns to make it readable
         display_cols = ['First Name', 'Last Name', 'Email', 'Phone Number']
-        # Filter to exist columns only
         display_cols = [c for c in display_cols if c in df_display.columns]
         
         event = st.dataframe(
@@ -125,7 +129,6 @@ else:
             if not cand_email or "@" not in str(cand_email):
                 st.error(f"❌ No valid email found for {cand_name}.")
             else:
-                # Compose the Email
                 subject = f"Feedback Request: Youth4Jobs Survey"
                 body = f"""Hi {cand_name},
 
@@ -137,7 +140,6 @@ Please take 2 minutes to fill out this survey:
 Thank you!
 Youth4Jobs Team"""
                 
-                # Generate Mailto Link
                 params = urllib.parse.urlencode({'subject': subject, 'body': body})
                 mailto_link = f"mailto:{cand_email}?{params}"
                 
