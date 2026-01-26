@@ -36,7 +36,7 @@ st.markdown("""
 # We re-use your auth logic so the home page is also secure
 user = login_required()
 
-st.title("🚀 Y4J AiOps Ecosystem")
+st.title("🚀 Y4J Youth Apps Home")
 st.write(f"Welcome back, **{user['name']}**. Select a module to begin:")
 st.divider()
 
