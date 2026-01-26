@@ -1,53 +1,63 @@
-# (The AI Brain) Handles extraction for BOTH YouthScan and YouthJobs.
-import streamlit as st
 import google.generativeai as genai
 import json
-import pandas as pd
+import streamlit as st
 
-def configure_gemini():
-    if "gemini" in st.secrets:
+# --- 🎯 CENTRAL CONFIGURATION (The Single Source of Truth) ---
+# Change this ONE line to upgrade the "Brain" for ALL apps.
+# Options: 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'
+GEMINI_MODEL_NAME = "gemini-1.5-flash"
+
+def get_gemini_model():
+    """
+    Configures and returns a Gemini model instance using the central model name.
+    """
+    # 1. Configure the API Key safely
+    if "gemini" in st.secrets and "api_key" in st.secrets["gemini"]:
         genai.configure(api_key=st.secrets["gemini"]["api_key"])
-        return True
-    return False
+    else:
+        st.error("❌ Gemini API Key missing in secrets.toml")
+        return None
 
-def parse_document_dynamic(file_bytes, target_columns, mime_type, prompt_context="Candidate Data"):
-    """
-    Generic parser for Candidates or Jobs.
-    Enforces English translation for Indic scripts.
-    """
-    if not configure_gemini():
-        return [{"error": "Gemini API Key missing"}]
+    # 2. Return the Model defined in the constant above
+    return genai.GenerativeModel(GEMINI_MODEL_NAME)
 
-    model = genai.GenerativeModel('gemini-3-flash-preview')
-# was gemini-2.5-flash
-    # --- 📝 UPDATED PROMPT WITH TRANSLATION RULES ---
+def parse_document_dynamic(file_bytes, fields_list, mime_type, prompt_context="Document"):
+    """
+    Generic function to extract specific fields from ANY image/PDF.
+    Uses the Central Model Configuration.
+    """
+    model = get_gemini_model()
+    if not model:
+        return [{"error": "Model initialization failed"}]
+
+    # 1. Construct the Prompt dynamically based on requested fields
+    fields_str = ", ".join(fields_list)
+    
     prompt = f"""
-    You are an expert data entry assistant for the Youth4Jobs Foundation.
+    Analyze this {prompt_context}.
+    Extract the following specific information: {fields_str}.
     
-    CONTEXT: 
-    {prompt_context}
-    
-    TASK:
-    Extract the following fields from the document: {', '.join(target_columns)}
-    
-    CRITICAL RULES:
-    1. Output strictly valid JSON list of objects.
-    2. If a field is missing, use "N/A".
-    3. 🌐 TRANSLATION REQUIRED: If any text is in an Indic language (Hindi, Marathi, Telugu, Tamil, etc.) or Devanagari script, you MUST translate or transliterate it into English.
-       - Example: If name is "रोहित शर्मा", output "Rohit Sharma".
-       - Example: If education is "दसवीं पास", output "10th Pass".
-    4. Do not include markdown formatting (like ```json) in your response. Just the raw JSON.
+    Strictly output the result as a valid JSON list of dictionaries.
+    Example format: [{{"Field Name": "Value"}}]
+    If a field is not found, return "N/A" for that field.
     """
-    
+
+    # 2. Prepare the data part (Image or PDF)
+    document_part = {
+        "mime_type": mime_type,
+        "data": file_bytes
+    }
+
+    # 3. Call Gemini
     try:
-        parts = [prompt, {"mime_type": mime_type, "data": file_bytes}]
-        response = model.generate_content(parts)
+        response = model.generate_content([prompt, document_part])
         
-        # Clean up response if the model ignores Rule #4
-        json_text = response.text.replace("```json", "").replace("```", "").strip()
+        # 4. Clean and Parse JSON
+        text_response = response.text
+        # Remove markdown code blocks if present
+        clean_json = text_response.replace("```json", "").replace("```", "").strip()
         
-        data = json.loads(json_text)
-        return data if isinstance(data, list) else [data]
-        
+        return json.loads(clean_json)
+
     except Exception as e:
         return [{"error": f"AI Parsing Error: {str(e)}"}]
