@@ -50,23 +50,4 @@ with col_nav:
 
 # 4. INPUT LOGIC
 with col_content:
-    mode = st.session_state["input_mode"]
-    st.subheader(f"Mode: {mode.title()}")
-
-    if mode == "upload":
-        up = st.file_uploader(
-            "Select JD file", 
-            type=["pdf", "png", "jpg"], 
-            key=f"jd_widget_{st.session_state['uploader_key']}"
-        )
-        if up: st.session_state["active_file"] = {"data": up.getvalue(), "mime": up.type}
-
-    elif mode == "drive":
-        st.info("Paste a link to a JD file from Google Drive.")
-        link = st.text_input("Google Drive Link")
-        if link and st.button("Fetch from Drive"):
-            data, mime, err = get_file_from_link(link)
-            if err: st.error(err)
-            else:
-                st.success("✅ File Loaded!")
-                st.session_state["active_file"] = {"data": data
+    mode = st.session_state["
