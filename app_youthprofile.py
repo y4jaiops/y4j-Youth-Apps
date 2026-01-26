@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+import urllib.parse
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
 from logic.logic_sheets import get_or_create_spreadsheet, read_data_from_sheet, overwrite_sheet_with_df
@@ -12,8 +13,11 @@ user = login_required()
 st.title("🔵 YouthProfile Manager")
 st.write(f"Logged in as: **{user['name']}**")
 
+# --- CONFIGURATION ---
+SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" # <--- PASTE YOUR LINK HERE
+
 # 2. LOAD DATA
-@st.cache_data(ttl=60) # Cache for speed, expire every 60s
+@st.cache_data(ttl=60)
 def load_candidates():
     fid = st.secrets.get("youthscan", {}).get("folder_id")
     url = get_or_create_spreadsheet("YouthScan_Data", fid)
@@ -35,66 +39,102 @@ else:
     # A. METRICS
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Candidates", len(df_candidates))
-    
-    # Count unique locations if 'State' exists
     if 'State' in df_candidates.columns:
-        col2.metric("Locations covered", df_candidates['State'].nunique())
-    
-    # Count specific disability types if exists
+        col2.metric("Locations", df_candidates['State'].nunique())
     if 'Disability Type' in df_candidates.columns:
         col3.metric("Disability Types", df_candidates['Disability Type'].nunique())
 
     st.divider()
 
-    # B. SEARCH & FILTER
-    search_term = st.text_input("🔍 Search Candidates (Name, Location, Skills...)", "")
+    # B. SEARCH & ACTION
+    col_search, col_action = st.columns([3, 1])
+    with col_search:
+        search_term = st.text_input("🔍 Search Candidates", "")
+    with col_action:
+        # Action Mode Toggle
+        action_mode = st.radio("Mode:", ["Edit Data", "Send Survey"], horizontal=True)
 
-    # C. EDITABLE GRID
-    st.subheader("📝 Edit Database")
-    st.caption("Double-click any cell to edit. Click 'Save Changes' when done.")
-
-    # Apply Search Filter (Visual only - we edit the full DF usually, but here we edit the view)
-    # NOTE: For simple editing, we edit the FULL dataframe to ensure row indexes match.
-    # If search is active, we just highlight; or we can filter. 
-    # To keep it safe: We display the DATA EDITOR.
-    
+    # C. DATA DISPLAY
     if search_term:
-        # Simple string matching across all columns
         mask = df_candidates.astype(str).apply(lambda x: x.str.contains(search_term, case=False)).any(axis=1)
-        df_display = df_candidates[mask]
+        df_display = df_candidates[mask].copy()
     else:
-        df_display = df_candidates
+        df_display = df_candidates.copy()
 
-    # THE MAGIC WIDGET: Data Editor
-    # num_rows="dynamic" allows you to ADD or DELETE rows!
-    edited_df = st.data_editor(
-        df_display, 
-        num_rows="dynamic", 
-        use_container_width=True,
-        key="profile_editor"
-    )
+    # --- MODE 1: EDIT DATA ---
+    if action_mode == "Edit Data":
+        st.caption("📝 **Edit Mode:** Double-click cells to fix typos. Click Save below.")
+        
+        edited_df = st.data_editor(
+            df_display, 
+            num_rows="dynamic", 
+            use_container_width=True,
+            key="profile_editor"
+        )
 
-    # 4. SAVE LOGIC
-    st.write("")
-    col_l, col_r = st.columns([4, 1])
-    
-    with col_r:
+        st.write("")
         if st.button("💾 Save Changes", type="primary"):
             if sheet_url:
                 with st.spinner("Syncing to Google Drive..."):
-                    # We need to be careful: If we filtered the view, we shouldn't overwrite the whole DB 
-                    # with just the filtered view.
-                    
                     if search_term:
-                        st.error("⚠️ Safety Lock: Please clear the Search Box before Saving to prevent data loss.")
+                        st.error("⚠️ Safety Lock: Please clear the Search Box before Saving.")
                     else:
-                        # Save the FULL edited dataframe
                         if overwrite_sheet_with_df(sheet_url, edited_df):
                             st.success("✅ Database Updated!")
-                            st.cache_data.clear() # Clear cache so next reload gets fresh data
+                            st.cache_data.clear()
                             time.sleep(2)
                             st.rerun()
                         else:
                             st.error("❌ Save Failed.")
+    
+    # --- MODE 2: SEND SURVEY ---
+    elif action_mode == "Send Survey":
+        st.caption("📧 **Survey Mode:** Select a candidate to draft an email with the survey link.")
+        
+        # We use a dataframe with a selection checkbox
+        # We only show key columns to make it readable
+        display_cols = ['First Name', 'Last Name', 'Email', 'Phone Number']
+        # Filter to exist columns only
+        display_cols = [c for c in display_cols if c in df_display.columns]
+        
+        event = st.dataframe(
+            df_display[display_cols],
+            use_container_width=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+        
+        # Logic to handle selection
+        if event.selection.rows:
+            idx = event.selection.rows[0]
+            selected_row = df_display.iloc[idx]
+            
+            cand_name = selected_row.get('First Name', 'Candidate')
+            cand_email = selected_row.get('Email', '')
+            
+            st.divider()
+            st.subheader(f"📨 Contact: {cand_name}")
+            
+            if not cand_email or "@" not in str(cand_email):
+                st.error(f"❌ No valid email found for {cand_name}.")
             else:
-                st.error("Database URL not found.")
+                # Compose the Email
+                subject = f"Feedback Request: Youth4Jobs Survey"
+                body = f"""Hi {cand_name},
+
+We are updating our records at Youth4Jobs and would love your input.
+Please take 2 minutes to fill out this survey:
+
+{SURVEY_LINK}
+
+Thank you!
+Youth4Jobs Team"""
+                
+                # Generate Mailto Link
+                params = urllib.parse.urlencode({'subject': subject, 'body': body})
+                mailto_link = f"mailto:{cand_email}?{params}"
+                
+                st.markdown(f"**To:** `{cand_email}`")
+                st.info("Click the button below to open your email app.")
+                st.link_button("📤 Open Draft Email", mailto_link, type="primary")
+
