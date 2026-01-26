@@ -14,6 +14,7 @@ st.title("🔵 YouthProfile Manager")
 st.write(f"Logged in as: **{user['name']}**")
 
 # --- CONFIGURATION ---
+# Replace this with your actual Google Form link
 SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" 
 
 # 2. HELPER FUNCTIONS
@@ -101,4 +102,7 @@ else:
         if st.button("💾 Save Changes", type="primary"):
             if sheet_url:
                 with st.spinner("Syncing to Google Drive..."):
-                    if search
+                    # THIS IS WHERE THE ERROR WAS (Fixed variable name)
+                    if search_term:
+                        st.error("⚠️ Safety Lock: Please clear the Search Box before Saving.")
+                    else
