@@ -26,9 +26,6 @@ def load_candidates():
         data = read_data_from_sheet(url)
         if data:
             df = pd.DataFrame(data)
-            # Ensure phone is string in the dataframe
-            if 'Phone Number' in df.columns:
-                df['Phone Number'] = df['Phone Number'].astype(str).replace('nan', '')
             return df, url
             
     return pd.DataFrame(), url
@@ -58,31 +55,46 @@ else:
         # Action Mode Toggle
         action_mode = st.radio("Mode:", ["Edit Data", "Send Survey"], horizontal=True)
 
-    # C. DATA DISPLAY
+    # C. DATA DISPLAY & PREP
+    # 1. Identify the Phone Column dynamically (insensitive case search)
+    phone_col_name = None
+    for col in df_candidates.columns:
+        if "phone" in col.lower() or "mobile" in col.lower():
+            phone_col_name = col
+            break
+    
+    # 2. Filter Data based on search
     if search_term:
         mask = df_candidates.astype(str).apply(lambda x: x.str.contains(search_term, case=False)).any(axis=1)
         df_display = df_candidates[mask].copy()
     else:
         df_display = df_candidates.copy()
 
+    # 3. FORCE STRING TYPE (Crucial for editing)
+    # We do this right before display to ensure it's text
+    if phone_col_name and phone_col_name in df_display.columns:
+        df_display[phone_col_name] = df_display[phone_col_name].astype(str).replace('nan', '')
+
     # --- MODE 1: EDIT DATA ---
     if action_mode == "Edit Data":
         st.caption("📝 **Edit Mode:** Double-click cells to fix typos. Click Save below.")
         
-        # --- THE FIX IS HERE ---
-        # We explicitly tell Streamlit: "Render 'Phone Number' as a Text Column, not a Number."
+        # Build the Column Configuration dynamically
+        my_column_config = {}
+        if phone_col_name:
+            my_column_config[phone_col_name] = st.column_config.TextColumn(
+                label="Phone Number",
+                help="Enter phone number (Text allowed)",
+                default="",
+                width="medium"
+            )
+
         edited_df = st.data_editor(
             df_display, 
             num_rows="dynamic", 
             use_container_width=True,
             key="profile_editor",
-            column_config={
-                "Phone Number": st.column_config.TextColumn(
-                    "Phone Number",
-                    help="Enter phone number (Text allowed)",
-                    validate=None # Allows any character
-                )
-            }
+            column_config=my_column_config
         )
 
         st.write("")
@@ -105,8 +117,11 @@ else:
         st.caption("📧 **Survey Mode:** Select a candidate to draft an email with the survey link.")
         
         # We use a dataframe with a selection checkbox
-        display_cols = ['First Name', 'Last Name', 'Email', 'Phone Number']
-        display_cols = [c for c in display_cols if c in df_display.columns]
+        # Try to find standard columns, but fallback gracefully
+        target_cols = ['First Name', 'Last Name', 'Email']
+        if phone_col_name: target_cols.append(phone_col_name)
+        
+        display_cols = [c for c in target_cols if c in df_display.columns]
         
         event = st.dataframe(
             df_display[display_cols],
