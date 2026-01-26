@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import json
+import urllib.parse
 import google.generativeai as genai
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
@@ -16,12 +17,12 @@ st.write(f"👋 Hi **{user['name']}**! Let's match candidates to jobs.")
 # 2. LOAD DATABASES (SUPPLY & DEMAND)
 @st.cache_data(ttl=60)
 def load_data():
-    # Load Candidates (From Orange App Folder)
+    # Load Candidates
     scan_fid = st.secrets.get("youthscan", {}).get("folder_id")
     scan_url = get_or_create_spreadsheet("YouthScan_Data", scan_fid)
     df_c = pd.DataFrame(read_data_from_sheet(scan_url)) if scan_url else pd.DataFrame()
     
-    # Load Jobs (From Green App Folder)
+    # Load Jobs
     jobs_fid = st.secrets.get("youthjobs", {}).get("folder_id")
     jobs_url = get_or_create_spreadsheet("YouthJobs_Master_DB", jobs_fid)
     df_j = pd.DataFrame(read_data_from_sheet(jobs_url)) if jobs_url else pd.DataFrame()
@@ -41,7 +42,7 @@ col_left, col_right = st.columns([1, 2])
 
 with col_left:
     st.subheader("👤 Candidate")
-    # Create a simple label for the dropdown
+    # Dropdown label
     c_list = df_candidates.apply(lambda x: f"{x.get('First Name','')} {x.get('Last Name','')}", axis=1)
     selected_name = st.selectbox("Select Youth", c_list)
     
@@ -56,6 +57,11 @@ with col_left:
     **♿ Type:** {profile.get('Disability Type')}  
     **🛠 Skills:** {profile.get('Skills', 'N/A')}
     """)
+    
+    # Show their email if available
+    cand_email = profile.get('Email', '')
+    if cand_email:
+        st.caption(f"📧 {cand_email}")
 
 with col_right:
     st.subheader("🎯 Job Recommendations")
@@ -64,7 +70,6 @@ with col_right:
     filter_loc = st.checkbox("Filter by Location Match?", value=True)
     
     if filter_loc:
-        # Simple fuzzy match for state/city
         loc = str(profile.get('State', '')).strip()
         jobs_pool = df_jobs[df_jobs['Location'].astype(str).str.contains(loc, case=False, na=False)]
     else:
@@ -79,47 +84,66 @@ with col_right:
             with st.spinner(f"Gemini is interviewing {selected_name} for these roles..."):
                 
                 # PREPARE DATA FOR AI
-                # We limit the columns to save tokens and improve accuracy
-                jobs_json = jobs_pool[['Job Title', 'Company Name', 'Required Skills', 'Min Experience', 'Salary Range']].to_json(orient='records')
+                jobs_json = jobs_pool[['Job Title', 'Company Name', 'Required Skills', 'Min Experience']].to_json(orient='records')
                 profile_str = json.dumps(profile.to_dict())
                 
                 # THE RECRUITER PROMPT
-                model = genai.GenerativeModel('gemini-3-flash-preview')
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 prompt = f"""
                 Act as a Disability Placement Officer.
-                
-                CANDIDATE:
-                {profile_str}
-                
-                OPEN JOBS:
-                {jobs_json}
+                CANDIDATE: {profile_str}
+                OPEN JOBS: {jobs_json}
                 
                 TASK:
                 Rank the Top 3 most suitable jobs.
-                You must calculate a "Match Score" (0-100%) based on:
-                1. Skills Match (Critical)
-                2. Education Level
-                3. Disability Friendliness (Implied)
-                
-                OUTPUT:
-                Return ONLY a JSON list:
-                [{{"title": "...", "company": "...", "score": 90, "reason": "Short explanation why..."}}]
+                Output ONLY a JSON list:
+                [{{"title": "...", "company": "...", "score": 90, "reason": "..."}}]
                 """
                 
                 try:
                     response = model.generate_content(prompt)
-                    # Clean markdown
                     clean_json = response.text.replace("```json", "").replace("```", "").strip()
                     matches = json.loads(clean_json)
                     
-                    # RENDER CARDS
+                    # RENDER RESULTS
                     for m in matches:
                         score = m['score']
-                        color = "green" if score >= 80 else "orange" if score >= 50 else "red"
+                        # Determine Color
+                        if score >= 80: color_emoji = "🟢"
+                        elif score >= 50: color_emoji = "🟠"
+                        else: color_emoji = "🔴"
                         
-                        with st.expander(f"**{score}% Match** | {m['title']} @ {m['company']}", expanded=True):
-                            st.write(m['reason'])
+                        with st.expander(f"{color_emoji} {m['title']} @ {m['company']} ({score}%)", expanded=True):
+                            st.write(f"_{m['reason']}_")
                             st.progress(score / 100)
+                            
+                            # --- EMAIL GENERATOR ---
+                            if cand_email:
+                                subject = f"Job Opportunity: {m['title']} at {m['company']}"
+                                body = f"""Hi {profile.get('First Name')},
+
+We found a job matching your skills in {profile.get('Skills', 'your field')}!
+
+Role: {m['title']}
+Company: {m['company']}
+Location: {profile.get('State')}
+
+Our AI recruiter matched you because:
+"{m['reason']}"
+
+Are you interested in applying?
+
+Best,
+Youth4Jobs Team"""
+                                
+                                # Encode for URL
+                                params = urllib.parse.urlencode({'subject': subject, 'body': body})
+                                mailto_link = f"mailto:{cand_email}?{params}"
+                                
+                                # The Button
+                                st.link_button("✉️ Draft Email to Candidate", mailto_link)
+                            else:
+                                st.caption("🚫 No email address found for candidate.")
                             
                 except Exception as e:
                     st.error(f"AI Error: {e}")
