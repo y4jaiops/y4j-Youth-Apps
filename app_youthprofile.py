@@ -1,76 +1,100 @@
 import streamlit as st
 import pandas as pd
+import time
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
-from logic.logic_sheets import get_or_create_spreadsheet, read_data_from_sheet
+from logic.logic_sheets import get_or_create_spreadsheet, read_data_from_sheet, overwrite_sheet_with_df
 
 # 1. SETUP
 set_app_theme("profile") # 🔵 Blue Vibe
 user = login_required()
 
-st.write(f"👋 Hi **{user['name']}**! Here is your Candidate Database.")
+st.title("🔵 YouthProfile Manager")
+st.write(f"Logged in as: **{user['name']}**")
 
 # 2. LOAD DATA
-# We use the Folder ID from YouthScan because that's where the data lives.
-folder_id = st.secrets.get("youthscan", {}).get("folder_id")
-sheet_name = "YouthScan_Data" # Default name we used in the Orange App
-
-# Helper to load data (Cached for performance)
-@st.cache_data(ttl=60) # Refresh every 60 seconds
-def load_data():
-    url = get_or_create_spreadsheet(sheet_name, folder_id)
+@st.cache_data(ttl=60) # Cache for speed, expire every 60s
+def load_candidates():
+    fid = st.secrets.get("youthscan", {}).get("folder_id")
+    url = get_or_create_spreadsheet("YouthScan_Data", fid)
+    
     if url:
         data = read_data_from_sheet(url)
-        return pd.DataFrame(data)
-    return pd.DataFrame()
+        if data:
+            return pd.DataFrame(data), url
+            
+    return pd.DataFrame(), url
 
-with st.spinner("Fetching database..."):
-    df = load_data()
+# Load initial data
+df_candidates, sheet_url = load_candidates()
 
-# 3. METRICS TOP BAR
-if not df.empty:
+# 3. DASHBOARD INTERFACE
+if df_candidates.empty:
+    st.warning("⚠️ No candidates found. Use 'YouthScan' to add people.")
+else:
+    # A. METRICS
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Candidates", len(df))
-    # Count unique locations if column exists
-    if "State" in df.columns:
-        col2.metric("Locations Covered", df["State"].nunique())
-    # Count specific disability types if column exists
-    if "Disability Type" in df.columns:
-        top_disability = df["Disability Type"].mode()[0] if not df["Disability Type"].empty else "N/A"
-        col3.metric("Most Common Profile", top_disability)
+    col1.metric("Total Candidates", len(df_candidates))
+    
+    # Count unique locations if 'State' exists
+    if 'State' in df_candidates.columns:
+        col2.metric("Locations covered", df_candidates['State'].nunique())
+    
+    # Count specific disability types if exists
+    if 'Disability Type' in df_candidates.columns:
+        col3.metric("Disability Types", df_candidates['Disability Type'].nunique())
 
     st.divider()
 
-    # 4. SEARCH & FILTER
-    st.subheader("🔍 Search Database")
+    # B. SEARCH & FILTER
+    search_term = st.text_input("🔍 Search Candidates (Name, Location, Skills...)", "")
+
+    # C. EDITABLE GRID
+    st.subheader("📝 Edit Database")
+    st.caption("Double-click any cell to edit. Click 'Save Changes' when done.")
+
+    # Apply Search Filter (Visual only - we edit the full DF usually, but here we edit the view)
+    # NOTE: For simple editing, we edit the FULL dataframe to ensure row indexes match.
+    # If search is active, we just highlight; or we can filter. 
+    # To keep it safe: We display the DATA EDITOR.
     
-    search_term = st.text_input("Search by Name, Skill, or Location", placeholder="e.g., Mumbai, Java, Rohit...")
-    
-    # Filter Logic
     if search_term:
-        # Case-insensitive search across all columns
-        mask = df.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
-        filtered_df = df[mask]
+        # Simple string matching across all columns
+        mask = df_candidates.astype(str).apply(lambda x: x.str.contains(search_term, case=False)).any(axis=1)
+        df_display = df_candidates[mask]
     else:
-        filtered_df = df
+        df_display = df_candidates
 
-    # 5. DATA GRID
-    st.dataframe(
-        filtered_df, 
-        use_container_width=True, 
-        hide_index=True,
-        column_config={
-            "Email": st.column_config.LinkColumn("Email"), # Make emails clickable
-        }
+    # THE MAGIC WIDGET: Data Editor
+    # num_rows="dynamic" allows you to ADD or DELETE rows!
+    edited_df = st.data_editor(
+        df_display, 
+        num_rows="dynamic", 
+        use_container_width=True,
+        key="profile_editor"
     )
+
+    # 4. SAVE LOGIC
+    st.write("")
+    col_l, col_r = st.columns([4, 1])
     
-    # 6. DOWNLOAD OPTION
-    st.download_button(
-        "📥 Download as CSV",
-        filtered_df.to_csv(index=False).encode('utf-8'),
-        "youth_profiles.csv",
-        "text/csv"
-    )
-
-else:
-    st.info("📭 Database is empty. Go to the Orange App (YouthScan) to add candidates!")
+    with col_r:
+        if st.button("💾 Save Changes", type="primary"):
+            if sheet_url:
+                with st.spinner("Syncing to Google Drive..."):
+                    # We need to be careful: If we filtered the view, we shouldn't overwrite the whole DB 
+                    # with just the filtered view.
+                    
+                    if search_term:
+                        st.error("⚠️ Safety Lock: Please clear the Search Box before Saving to prevent data loss.")
+                    else:
+                        # Save the FULL edited dataframe
+                        if overwrite_sheet_with_df(sheet_url, edited_df):
+                            st.success("✅ Database Updated!")
+                            st.cache_data.clear() # Clear cache so next reload gets fresh data
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Save Failed.")
+            else:
+                st.error("Database URL not found.")
