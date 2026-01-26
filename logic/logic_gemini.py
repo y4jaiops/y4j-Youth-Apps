@@ -5,7 +5,7 @@ import streamlit as st
 # --- 🎯 CENTRAL CONFIGURATION (The Single Source of Truth) ---
 # Change this ONE line to upgrade the "Brain" for ALL apps.
 # Options: 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'
-GEMINI_MODEL_NAME = "gemini-1.5-flash"
+GEMINI_MODEL_NAME = "gemini-3-flash-preview"
 
 def get_gemini_model():
     """
