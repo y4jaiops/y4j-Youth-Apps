@@ -14,7 +14,8 @@ st.title("🔵 YouthProfile Manager")
 st.write(f"Logged in as: **{user['name']}**")
 
 # --- CONFIGURATION ---
-SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" # <--- PASTE YOUR LINK HERE
+# Replace this with your actual Google Form link
+SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" 
 
 # 2. HELPER FUNCTIONS
 def clean_phone_number(phone_raw):
@@ -44,7 +45,14 @@ def load_candidates():
     if url:
         data = read_data_from_sheet(url)
         if data:
-            return pd.DataFrame(data), url
+            df = pd.DataFrame(data)
+            
+            # --- THE FIX: FORCE PHONE NUMBER TO STRING ---
+            # This ensures the editor treats it as text, allowing you to edit it easily.
+            if 'Phone Number' in df.columns:
+                df['Phone Number'] = df['Phone Number'].astype(str).replace('nan', '')
+                
+            return df, url
             
     return pd.DataFrame(), url
 
@@ -138,29 +146,4 @@ else:
             col_wa, col_mail = st.columns(2)
             
             # 1. WHATSAPP BUTTON
-            with col_wa:
-                clean_num = clean_phone_number(cand_phone)
-                if clean_num:
-                    # Create wa.me link
-                    encoded_msg = urllib.parse.quote(msg_body)
-                    wa_link = f"https://wa.me/{clean_num}?text={encoded_msg}"
-                    
-                    st.success(f"📱 Number: +{clean_num}")
-                    st.link_button("💬 Open WhatsApp Chat", wa_link, type="primary")
-                else:
-                    st.warning("⚠️ No valid Phone Number found.")
-
-            # 2. EMAIL BUTTON
-            with col_mail:
-                if cand_email and "@" in str(cand_email):
-                    # Create Mailto link
-                    subject = "Feedback Request: Youth4Jobs Survey"
-                    full_email_body = f"Hi {cand_name},\n\nWe are updating our records and would love your input.\nPlease fill out this survey:\n\n{SURVEY_LINK}\n\nThank you,\nYouth4Jobs Team"
-                    
-                    params = urllib.parse.urlencode({'subject': subject, 'body': full_email_body})
-                    mailto_link = f"mailto:{cand_email}?{params}"
-                    
-                    st.info(f"📧 Email: {cand_email}")
-                    st.link_button("📤 Open Draft Email", mailto_link)
-                else:
-                    st.warning("⚠️ No valid Email found.")
+            with col_
