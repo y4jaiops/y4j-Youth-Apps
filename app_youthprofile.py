@@ -146,4 +146,23 @@ else:
             col_wa, col_mail = st.columns(2)
             
             # 1. WHATSAPP BUTTON
-            with col_
+            with col_wa:
+                clean_num = clean_phone_number(cand_phone)
+                if clean_num:
+                    # Create wa.me link
+                    encoded_msg = urllib.parse.quote(msg_body)
+                    wa_link = f"https://wa.me/{clean_num}?text={encoded_msg}"
+                    
+                    st.success(f"📱 Number: +{clean_num}")
+                    st.link_button("💬 Open WhatsApp Chat", wa_link, type="primary")
+                else:
+                    st.warning("⚠️ No valid Phone Number found.")
+
+            # 2. EMAIL BUTTON
+            with col_mail:
+                if cand_email and "@" in str(cand_email):
+                    # Create Mailto link
+                    subject = "Feedback Request: Youth4Jobs Survey"
+                    full_email_body = f"Hi {cand_name},\n\nWe are updating our records and would love your input.\nPlease fill out this survey:\n\n{SURVEY_LINK}\n\nThank you,\nYouth4Jobs Team"
+                    
+                    params = urllib.parse.urlencode({'subject': subject,
