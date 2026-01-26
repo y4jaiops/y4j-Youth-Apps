@@ -84,7 +84,7 @@ with col_right:
                 profile_str = json.dumps(profile.to_dict())
                 
                 # THE RECRUITER PROMPT
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-3-flash-preview')
                 prompt = f"""
                 Act as a Disability Placement Officer.
                 
