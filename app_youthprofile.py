@@ -14,29 +14,9 @@ st.title("🔵 YouthProfile Manager")
 st.write(f"Logged in as: **{user['name']}**")
 
 # --- CONFIGURATION ---
-# Replace this with your actual Google Form link
-SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" 
+SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" # <--- PASTE YOUR LINK HERE
 
-# 2. HELPER FUNCTIONS
-def clean_phone_number(phone_raw):
-    """
-    Cleans phone number for WhatsApp URL.
-    Removes dashes, spaces, brackets. Ensures country code (defaults to India +91).
-    """
-    if pd.isna(phone_raw): return None
-    
-    # Remove non-digit characters
-    clean = ''.join(filter(str.isdigit, str(phone_raw)))
-    
-    if not clean: return None
-    
-    # Append country code if it looks like a 10-digit Indian number
-    if len(clean) == 10:
-        return "91" + clean
-        
-    return clean
-
-# 3. LOAD DATA
+# 2. LOAD DATA
 @st.cache_data(ttl=60)
 def load_candidates():
     fid = st.secrets.get("youthscan", {}).get("folder_id")
@@ -45,20 +25,14 @@ def load_candidates():
     if url:
         data = read_data_from_sheet(url)
         if data:
-            df = pd.DataFrame(data)
-            
-            # --- THE FIX: FORCE PHONE NUMBER TO STRING ---
-            if 'Phone Number' in df.columns:
-                df['Phone Number'] = df['Phone Number'].astype(str).replace('nan', '')
-                
-            return df, url
+            return pd.DataFrame(data), url
             
     return pd.DataFrame(), url
 
 # Load initial data
 df_candidates, sheet_url = load_candidates()
 
-# 4. DASHBOARD INTERFACE
+# 3. DASHBOARD INTERFACE
 if df_candidates.empty:
     st.warning("⚠️ No candidates found. Use 'YouthScan' to add people.")
 else:
@@ -102,7 +76,64 @@ else:
         if st.button("💾 Save Changes", type="primary"):
             if sheet_url:
                 with st.spinner("Syncing to Google Drive..."):
-                    # THIS IS WHERE THE ERROR WAS (Fixed variable name)
                     if search_term:
                         st.error("⚠️ Safety Lock: Please clear the Search Box before Saving.")
-                    else
+                    else:
+                        if overwrite_sheet_with_df(sheet_url, edited_df):
+                            st.success("✅ Database Updated!")
+                            st.cache_data.clear()
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Save Failed.")
+    
+    # --- MODE 2: SEND SURVEY (EMAIL ONLY) ---
+    elif action_mode == "Send Survey":
+        st.caption("📧 **Survey Mode:** Select a candidate to draft an email with the survey link.")
+        
+        # We use a dataframe with a selection checkbox
+        # We only show key columns to make it readable
+        display_cols = ['First Name', 'Last Name', 'Email', 'Phone Number']
+        # Filter to exist columns only
+        display_cols = [c for c in display_cols if c in df_display.columns]
+        
+        event = st.dataframe(
+            df_display[display_cols],
+            use_container_width=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+        
+        # Logic to handle selection
+        if event.selection.rows:
+            idx = event.selection.rows[0]
+            selected_row = df_display.iloc[idx]
+            
+            cand_name = selected_row.get('First Name', 'Candidate')
+            cand_email = selected_row.get('Email', '')
+            
+            st.divider()
+            st.subheader(f"📨 Contact: {cand_name}")
+            
+            if not cand_email or "@" not in str(cand_email):
+                st.error(f"❌ No valid email found for {cand_name}.")
+            else:
+                # Compose the Email
+                subject = f"Feedback Request: Youth4Jobs Survey"
+                body = f"""Hi {cand_name},
+
+We are updating our records at Youth4Jobs and would love your input.
+Please take 2 minutes to fill out this survey:
+
+{SURVEY_LINK}
+
+Thank you!
+Youth4Jobs Team"""
+                
+                # Generate Mailto Link
+                params = urllib.parse.urlencode({'subject': subject, 'body': body})
+                mailto_link = f"mailto:{cand_email}?{params}"
+                
+                st.markdown(f"**To:** `{cand_email}`")
+                st.info("Click the button below to open your email app.")
+                st.link_button("📤 Open Draft Email", mailto_link, type="primary")
