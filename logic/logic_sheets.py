@@ -53,3 +53,32 @@ def read_data_from_sheet(sheet_url):
     except Exception as e:
         st.error(f"Read Error: {e}")
         return []
+
+
+# --- ADD THIS TO THE BOTTOM OF logic/logic_sheets.py ---
+
+def overwrite_sheet_with_df(sheet_url, df):
+    """
+    DANGER: This completely clears the sheet and replaces it with the new DataFrame.
+    Used for 'Edit & Save' functionality.
+    """
+    try:
+        sh = gc.open_by_url(sheet_url)
+        worksheet = sh.get_worksheet(0) # Assume first tab
+        
+        # 1. Clear existing data
+        worksheet.clear()
+        
+        # 2. Prepare data for upload (Header + Rows)
+        # Convert NaNs to empty strings (Google Sheets hates NaNs)
+        df_clean = df.fillna("") 
+        data_to_upload = [df_clean.columns.values.tolist()] + df_clean.values.tolist()
+        
+        # 3. Update
+        worksheet.update(data_to_upload)
+        return True
+        
+    except Exception as e:
+        print(f"Error overwriting sheet: {e}")
+        return False
+        
