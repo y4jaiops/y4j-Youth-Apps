@@ -3,7 +3,7 @@ from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
 
 # 1. SETUP
-st.set_page_config(page_title="Y4J AiOps Ecosystem", page_icon="🚀", layout="centered")
+st.set_page_config(page_title="Y4J Youth Apps Home", page_icon="🚀", layout="centered")
 
 # Custom CSS for the "Launchpad" look
 st.markdown("""
