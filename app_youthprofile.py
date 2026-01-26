@@ -16,7 +16,26 @@ st.write(f"Logged in as: **{user['name']}**")
 # --- CONFIGURATION ---
 SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" 
 
-# 2. LOAD DATA
+# 2. HELPER FUNCTIONS
+def clean_phone_number(phone_raw):
+    """
+    Cleans phone number for WhatsApp URL.
+    Removes dashes, spaces, brackets. Ensures country code (defaults to India +91).
+    """
+    if pd.isna(phone_raw): return None
+    
+    # Remove non-digit characters
+    clean = ''.join(filter(str.isdigit, str(phone_raw)))
+    
+    if not clean: return None
+    
+    # Append country code if it looks like a 10-digit Indian number
+    if len(clean) == 10:
+        return "91" + clean
+        
+    return clean
+
+# 3. LOAD DATA
 @st.cache_data(ttl=60)
 def load_candidates():
     fid = st.secrets.get("youthscan", {}).get("folder_id")
@@ -33,7 +52,7 @@ def load_candidates():
 # Load initial data
 df_candidates, sheet_url = load_candidates()
 
-# 3. DASHBOARD INTERFACE
+# 4. DASHBOARD INTERFACE
 if df_candidates.empty:
     st.warning("⚠️ No candidates found. Use 'YouthScan' to add people.")
 else:
@@ -56,7 +75,7 @@ else:
         action_mode = st.radio("Mode:", ["Edit Data", "Send Survey"], horizontal=True)
 
     # C. DATA DISPLAY & PREP
-    # 1. Identify the Phone Column dynamically (insensitive case search)
+    # 1. Identify the Phone Column dynamically
     phone_col_name = None
     for col in df_candidates.columns:
         if "phone" in col.lower() or "mobile" in col.lower():
@@ -71,7 +90,6 @@ else:
         df_display = df_candidates.copy()
 
     # 3. FORCE STRING TYPE (Crucial for editing)
-    # We do this right before display to ensure it's text
     if phone_col_name and phone_col_name in df_display.columns:
         df_display[phone_col_name] = df_display[phone_col_name].astype(str).replace('nan', '')
 
@@ -112,12 +130,11 @@ else:
                         else:
                             st.error("❌ Save Failed.")
     
-    # --- MODE 2: SEND SURVEY ---
+    # --- MODE 2: SEND SURVEY (WHATSAPP & EMAIL) ---
     elif action_mode == "Send Survey":
-        st.caption("📧 **Survey Mode:** Select a candidate to draft an email with the survey link.")
+        st.caption("📱 **Survey Mode:** Select a candidate to contact them.")
         
         # We use a dataframe with a selection checkbox
-        # Try to find standard columns, but fallback gracefully
         target_cols = ['First Name', 'Last Name', 'Email']
         if phone_col_name: target_cols.append(phone_col_name)
         
@@ -130,7 +147,6 @@ else:
             selection_mode="single-row"
         )
         
-        # Logic to handle selection
         if event.selection.rows:
             idx = event.selection.rows[0]
             selected_row = df_display.iloc[idx]
@@ -138,26 +154,44 @@ else:
             cand_name = selected_row.get('First Name', 'Candidate')
             cand_email = selected_row.get('Email', '')
             
+            # Get phone safely
+            cand_phone = ""
+            if phone_col_name:
+                cand_phone = selected_row.get(phone_col_name, '')
+            
             st.divider()
             st.subheader(f"📨 Contact: {cand_name}")
             
-            if not cand_email or "@" not in str(cand_email):
-                st.error(f"❌ No valid email found for {cand_name}.")
-            else:
-                subject = f"Feedback Request: Youth4Jobs Survey"
-                body = f"""Hi {cand_name},
+            # THE MESSAGE CONTENT
+            msg_body = f"Hi {cand_name}, please help us by filling out this Youth4Jobs survey: {SURVEY_LINK} . Thanks!"
+            
+            col_wa, col_mail = st.columns(2)
+            
+            # 1. WHATSAPP BUTTON
+            with col_wa:
+                clean_num = clean_phone_number(cand_phone)
+                if clean_num:
+                    # Create wa.me link
+                    encoded_msg = urllib.parse.quote(msg_body)
+                    wa_link = f"https://wa.me/{clean_num}?text={encoded_msg}"
+                    
+                    st.success(f"📱 Mobile: +{clean_num}")
+                    st.link_button("💬 Open WhatsApp", wa_link, type="primary")
+                else:
+                    st.warning("⚠️ No valid Phone Number.")
 
-We are updating our records at Youth4Jobs and would love your input.
-Please take 2 minutes to fill out this survey:
-
-{SURVEY_LINK}
-
-Thank you!
-Youth4Jobs Team"""
-                
-                params = urllib.parse.urlencode({'subject': subject, 'body': body})
-                mailto_link = f"mailto:{cand_email}?{params}"
-                
-                st.markdown(f"**To:** `{cand_email}`")
-                st.info("Click the button below to open your email app.")
-                st.link_button("📤 Open Draft Email", mailto_link, type="primary")
+            # 2. EMAIL BUTTON
+            with col_mail:
+                if cand_email and "@" in str(cand_email):
+                    # Create Mailto link
+                    subject = "Feedback Request: Youth4Jobs Survey"
+                    full_email_body = f"Hi {cand_name},\n\nWe are updating our records and would love your input.\nPlease fill out this survey:\n\n{SURVEY_LINK}\n\nThank you,\nYouth4Jobs Team"
+                    
+                    email_params = {'subject': subject, 'body': full_email_body}
+                    params = urllib.parse.urlencode(email_params)
+                    mailto_link = f"mailto:{cand_email}?{params}"
+                    
+                    st.info(f"📧 Email: {cand_email}")
+                    st.link_button("📤 Open Draft Email", mailto_link)
+                else:
+                    st.warning("⚠️ No valid Email found.")
