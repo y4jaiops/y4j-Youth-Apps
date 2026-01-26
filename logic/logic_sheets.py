@@ -41,3 +41,15 @@ def append_batch_to_sheet(sheet_url, list_of_dicts):
     except Exception as e:
         st.error(f"Save Error: {e}")
         return False
+
+def read_data_from_sheet(sheet_url):
+    """Reads all data from a Google Sheet into a list of dicts."""
+    client = _get_client()
+    if not client: return []
+    
+    try:
+        sheet = client.open_by_url(sheet_url).sheet1
+        return sheet.get_all_records()
+    except Exception as e:
+        st.error(f"Read Error: {e}")
+        return []
