@@ -8,7 +8,7 @@ import google.generativeai as genai
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
 from logic.logic_sheets import get_or_create_spreadsheet, read_data_from_sheet
-from logic.logic_gemini import GEMINI_MODEL_NAME  # <--- The Central Config Upgrade
+from logic.logic_gemini import GEMINI_MODEL_NAME
 
 # 1. SETUP
 set_app_theme("match") # 🔴 Red/Magenta Vibe
@@ -65,9 +65,9 @@ with col_left:
     # Show email if available (visual confirmation)
     cand_email = profile.get('Email', '')
     if cand_email:
-        st.caption(f"📧 {cand_email}")
+        st.caption(f"📧 Candidate: {cand_email}")
     else:
-        st.caption("⚠️ No email on file")
+        st.caption("⚠️ No candidate email")
 
 # --- RIGHT COLUMN: JOB MATCHING ---
 with col_right:
@@ -92,11 +92,15 @@ with col_right:
             with st.spinner(f"Gemini ({GEMINI_MODEL_NAME}) is interviewing {selected_name}..."):
                 
                 # A. PREPARE DATA FOR AI
-                # Filter columns to save tokens
-                jobs_json = jobs_pool[['Job Title', 'Company Name', 'Required Skills', 'Min Experience']].to_json(orient='records')
+                # We added 'Contact Email' here so the AI can pass it back in the result
+                # Make sure the column exists, otherwise create a dummy one
+                if 'Contact Email' not in jobs_pool.columns:
+                    jobs_pool['Contact Email'] = ''
+
+                jobs_json = jobs_pool[['Job Title', 'Company Name', 'Required Skills', 'Min Experience', 'Contact Email']].to_json(orient='records')
                 profile_str = json.dumps(profile.to_dict())
                 
-                # B. INITIALIZE MODEL (Using Central Config)
+                # B. INITIALIZE MODEL
                 model = genai.GenerativeModel(GEMINI_MODEL_NAME)
                 
                 # C. THE PROMPT
@@ -106,9 +110,10 @@ with col_right:
                 OPEN JOBS: {jobs_json}
                 
                 TASK:
-                Rank the Top 3 most suitable jobs.
-                Output ONLY a JSON list:
-                [{{"title": "...", "company": "...", "score": 90, "reason": "..."}}]
+                Rank the Top 3 most suitable jobs based on skills, education, and disability accommodation needs.
+                
+                Output ONLY a JSON list (no markdown, just raw JSON):
+                [{{"title": "...", "company": "...", "email": "...", "score": 90, "reason": "..."}}]
                 """
                 
                 try:
@@ -119,43 +124,41 @@ with col_right:
                     
                     # E. RENDER RESULTS
                     for m in matches:
-                        score = m['score']
+                        score = m.get('score', 0)
                         # Determine Color Code
                         if score >= 80: color_emoji = "🟢"
                         elif score >= 50: color_emoji = "🟠"
                         else: color_emoji = "🔴"
                         
-                        with st.expander(f"{color_emoji} {m['title']} @ {m['company']} ({score}%)", expanded=True):
-                            st.write(f"_{m['reason']}_")
+                        with st.expander(f"{color_emoji} {m.get('title')} @ {m.get('company')} ({score}%)", expanded=True):
+                            st.write(f"_{m.get('reason')}_")
                             st.progress(score / 100)
                             
-                            # --- EMAIL GENERATOR ---
-                            if cand_email:
-                                subject = f"Job Opportunity: {m['title']} at {m['company']}"
-                                body = f"""Hi {profile.get('First Name')},
+                            col_c_mail, col_e_mail = st.columns(2)
 
-We found a job matching your skills in {profile.get('Skills', 'your field')}!
+                            # --- 1. EMAIL TO CANDIDATE ---
+                            with col_c_mail:
+                                if cand_email:
+                                    subject = f"Job Opportunity: {m.get('title')} at {m.get('company')}"
+                                    body = f"""Hi {profile.get('First Name')},\n\nWe found a match for you!\nRole: {m.get('title')}\nCompany: {m.get('company')}\n\nOur AI matched you because: "{m.get('reason')}"\n\nApply now?\n\n- Youth4Jobs"""
+                                    
+                                    params = urllib.parse.urlencode({'subject': subject, 'body': body})
+                                    st.link_button("👤 Email Candidate", f"mailto:{cand_email}?{params}")
+                                else:
+                                    st.caption("🚫 No Candidate Email")
 
-Role: {m['title']}
-Company: {m['company']}
-Location: {profile.get('State')}
-
-Our AI recruiter matched you because:
-"{m['reason']}"
-
-Are you interested in applying?
-
-Best,
-Youth4Jobs Team"""
-                                
-                                # Encode specifically for mailto links
-                                params = urllib.parse.urlencode({'subject': subject, 'body': body})
-                                mailto_link = f"mailto:{cand_email}?{params}"
-                                
-                                # The Action Button
-                                st.link_button("✉️ Draft Email to Candidate", mailto_link)
-                            else:
-                                st.warning("🚫 Cannot draft email: No email address found for this candidate.")
+                            # --- 2. EMAIL TO EMPLOYER (NEW FEATURE) ---
+                            with col_e_mail:
+                                emp_email = m.get('email', '')
+                                if emp_email and "@" in emp_email:
+                                    subject_emp = f"Candidate Profile: {profile.get('First Name')} for {m.get('title')}"
+                                    body_emp = f"""Hi {m.get('company')} Hiring Team,\n\nI am writing from Youth4Jobs. We have identified a strong candidate for your {m.get('title')} role.\n\nName: {profile.get('First Name')} {profile.get('Last Name')}\nSkills: {profile.get('Skills')}\nLocation: {profile.get('State')}\n\nWhy they are a fit: {m.get('reason')}\n\nPlease let us know if you would like to interview them.\n\nBest,\nYouth4Jobs Placement Team"""
+                                    
+                                    params_emp = urllib.parse.urlencode({'subject': subject_emp, 'body': body_emp})
+                                    # Use type="primary" to make it pop as the main action
+                                    st.link_button("🏢 Email Employer", f"mailto:{emp_email}?{params_emp}", type="primary")
+                                else:
+                                    st.caption("🚫 No Employer Email")
                             
                 except Exception as e:
                     st.error(f"AI Error: {e}")
