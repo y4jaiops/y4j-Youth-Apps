@@ -156,3 +156,5 @@ if 'extracted_jobs' in st.session_state:
                     time.sleep(1)
                     st.rerun()
                 else:
+                    # THIS LINE MUST BE INDENTED
+                    st.error("❌ Save failed. Check logs.")
