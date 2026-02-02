@@ -88,7 +88,7 @@ if active_file["data"] is not None:
         st.markdown(f"**📄 Document Loaded: {active_file['mime']}**")
     
     # --- JOB SPECIFIC FIELDS ---
-    default_cols = "Job Title, Company Name, Location, Salary Range, Required Skills, Min Experience, Contact Email, Phone number"
+    default_cols = "Job Title, Company Name, Location, Salary Range, Required Skills, Min Experience, Contact Email, Phone number, Benefits"
     cols = st.text_area("Fields to Extract", value=default_cols).split(",")
     
     if st.button("🚀 Analyze Job Description", type="primary"):
