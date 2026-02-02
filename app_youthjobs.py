@@ -3,6 +3,13 @@ import pandas as pd
 import json
 import time
 import google.generativeai as genai
+import PIL.Image
+# We wrap fitz in a try-block in case it's not installed yet, preventing crash on load
+try:
+    import fitz # PyMuPDF
+except ImportError:
+    st.warning("⚠️ PyMuPDF (fitz) is missing. Please add 'pymupdf' to requirements.txt")
+
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
 from logic.logic_sheets import get_or_create_spreadsheet, append_batch_to_sheet
@@ -70,10 +77,82 @@ if st.button("🚀 Analyze Jobs", type="primary"):
             # B. SEND TO GEMINI
             response = None
             if uploaded_file:
-                # Image/PDF processing
-                import PIL.Image
-                import fitz # PyMuPDF for PDF
-                
                 if uploaded_file.type == "application/pdf":
-                    # Simple PDF text extraction for speed
+                    # PDF Processing
                     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+                    pdf_text = ""
+                    for page in doc:
+                        pdf_text += page.get_text()
+                    response = model.generate_content([base_prompt, pdf_text])
+                else:
+                    # Image Processing
+                    img = PIL.Image.open(uploaded_file)
+                    response = model.generate_content([base_prompt, img])
+            else:
+                # Text Processing
+                response = model.generate_content([base_prompt, extracted_text])
+
+            # C. PARSE JSON
+            cleaned_json = response.text.replace("```json", "").replace("```", "").strip()
+            data_list = json.loads(cleaned_json)
+            
+            # Ensure it's a list
+            if isinstance(data_list, dict):
+                data_list = [data_list]
+                
+            # Save to session state
+            st.session_state['extracted_jobs'] = data_list
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"AI Error: {e}")
+
+# 4. REVIEW & SAVE SECTION
+if 'extracted_jobs' in st.session_state:
+    st.divider()
+    st.subheader("2. Review & Save")
+    st.info(f"✅ Found {len(st.session_state['extracted_jobs'])} distinct roles.")
+
+    # Convert to DataFrame
+    df_preview = pd.DataFrame(st.session_state['extracted_jobs'])
+    
+    # Ensure columns exist
+    required_cols = ["Job Title", "Company Name", "Location", "Salary Range", "Required Skills", "Contact Email"]
+    for col in required_cols:
+        if col not in df_preview.columns:
+            df_preview[col] = ""
+
+    # Reorder columns
+    df_preview = df_preview[required_cols + [c for c in df_preview.columns if c not in required_cols]]
+
+    # --- THE MAGIC EDITOR ---
+    edited_df = st.data_editor(
+        df_preview,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="job_editor"
+    )
+
+    # --- SAVE LOGIC ---
+    if st.button("💾 Save All Jobs to Database", type="primary"):
+        with st.spinner("Syncing to Google Sheets..."):
+            # Load Database URL
+            fid = st.secrets.get("youthjobs", {}).get("folder_id")
+            url = get_or_create_spreadsheet("YouthJobs_Master_DB", fid)
+            
+            if url:
+                # Get data from editor
+                final_data = edited_df.to_dict(orient='records')
+                
+                # Add metadata
+                for row in final_data:
+                    row['Added By'] = user['name']
+                    row['Date Added'] = time.strftime("%Y-%m-%d")
+                
+                # Batch Upload
+                if append_batch_to_sheet(url, final_data):
+                    st.toast(f"🎉 Saved {len(final_data)} jobs!", icon="✅")
+                    del st.session_state['extracted_jobs']
+                    time.sleep(1)
+                    st.rerun()
+                else:
