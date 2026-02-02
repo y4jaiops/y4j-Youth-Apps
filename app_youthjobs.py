@@ -4,7 +4,7 @@ import json
 import time
 import google.generativeai as genai
 import PIL.Image
-# We wrap fitz in a try-block in case it's not installed yet, preventing crash on load
+# Try-catch to prevent crashes if PyMuPDF isn't installed yet
 try:
     import fitz # PyMuPDF
 except ImportError:
@@ -38,6 +38,19 @@ elif input_method == "Upload Image/PDF":
 
 elif input_method == "Camera":
     uploaded_file = st.camera_input("Take a photo of the Job Poster")
+
+# --- RESTORED PREVIEW SECTION ---
+if uploaded_file:
+    st.divider()
+    st.caption("📄 Document Preview:")
+    
+    # If it is an image (from Camera or Upload), show it
+    if uploaded_file.type in ["image/png", "image/jpeg", "image/jpg"]:
+        st.image(uploaded_file, width=300, caption="Ready to Analyze")
+    
+    # If it is a PDF, show a success box with the name
+    elif uploaded_file.type == "application/pdf":
+        st.success(f"📂 PDF Loaded: {uploaded_file.name}")
 
 # 3. AI EXTRACTION LOGIC
 if st.button("🚀 Analyze Jobs", type="primary"):
@@ -156,5 +169,4 @@ if 'extracted_jobs' in st.session_state:
                     time.sleep(1)
                     st.rerun()
                 else:
-                    # THIS LINE MUST BE INDENTED
                     st.error("❌ Save failed. Check logs.")
