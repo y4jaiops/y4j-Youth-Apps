@@ -13,7 +13,7 @@ set_app_theme("scan") # 🟠 Orange Vibe
 user = login_required()
 genai.configure(api_key=st.secrets["gemini"]["api_key"])
 
-st.title("🟠 YouthScan: Candidate Entry")
+st.title("🟠 ResumeScan: Candidate Entry")
 st.write(f"Logged in as: **{user['name']}**")
 
 # 2. INPUT SECTION
