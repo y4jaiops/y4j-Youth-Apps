@@ -18,14 +18,18 @@ st.write(f"Logged in as: **{user['name']}**")
 
 # 2. INPUT SECTION
 st.subheader("1. Input Candidate Data")
-# ADDED "Paste Text" to the options here
 input_method = st.radio("Source:", ["Paste Text", "Upload Resume/ID", "Camera"], horizontal=True)
 
 extracted_text = ""
 uploaded_file = None
 
 if input_method == "Paste Text":
-    extracted_text = st.text_area("Paste Resume/Bio-data content here:", height=200, help("Paste text from WhatsApp, Email, or Word doc."))
+    # --- FIX IS HERE: help="..." instead of help(...) ---
+    extracted_text = st.text_area(
+        "Paste Resume/Bio-data content here:", 
+        height=200, 
+        help="Paste text from WhatsApp, Email, or Word doc."
+    )
 
 elif input_method == "Upload Resume/ID":
     uploaded_file = st.file_uploader("Choose file", type=['png', 'jpg', 'jpeg', 'pdf'])
@@ -137,15 +141,3 @@ if 'scanned_candidate' in st.session_state:
             
             # Load Database URL
             fid = st.secrets.get("youthscan", {}).get("folder_id")
-            url = get_or_create_spreadsheet("YouthScan_Data", fid)
-            
-            if url:
-                with st.spinner("Syncing to Google Sheets..."):
-                    # We wrap the dict in a list [] because append_batch expects a list
-                    if append_batch_to_sheet(url, [final_data]):
-                        st.success(f"🎉 Saved profile for {f_name}!")
-                        del st.session_state['scanned_candidate'] # Clear state
-                        time.sleep(2)
-                        st.rerun()
-                    else:
-                        st.error("❌ Save failed. Check logs.")
