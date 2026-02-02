@@ -123,7 +123,7 @@ if 'extracted_jobs' in st.session_state:
     df_preview = df_preview[required_cols + [c for c in df_preview.columns if c not in required_cols]]
 
     # --- THE MAGIC EDITOR ---
-    # This allows editing MULTIPLE rows at once
+    # We assign the editor output to 'edited_df'
     edited_df = st.data_editor(
         df_preview,
         num_rows="dynamic", # Allow user to add/delete rows manually too!
@@ -131,18 +131,12 @@ if 'extracted_jobs' in st.session_state:
         key="job_editor"
     )
 
-    if st.button("💾 Save All Jobs to Database", type="primary"):
+    # --- HELPER FUNCTION FOR SAVING ---
+    def save_data():
         # Load Database URL
         fid = st.secrets.get("youthjobs", {}).get("folder_id")
         url = get_or_create_spreadsheet("YouthJobs_Master_DB", fid)
         
         if url:
             # Convert DataFrame back to list of dicts
-            final_data = edited_df.to_dict(orient='records')
-            
-            # Add metadata (who added it, when)
-            for row in final_data:
-                row['Added By'] = user['name']
-                row['Date Added'] = time.strftime("%Y-%m-%d")
-            
-            # Batch
+            # We must use st.session_state["job_editor
