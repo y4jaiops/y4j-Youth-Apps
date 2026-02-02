@@ -1,132 +1,148 @@
-# app_youthjobs.py (The Green App 🟢) YouthJobs
 import streamlit as st
 import pandas as pd
+import json
 import time
+import google.generativeai as genai
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
-from logic.logic_drive import get_file_from_link
-from logic.logic_gemini import parse_document_dynamic
 from logic.logic_sheets import get_or_create_spreadsheet, append_batch_to_sheet
+from logic.logic_gemini import GEMINI_MODEL_NAME
 
 # 1. SETUP
 set_app_theme("jobs") # 🟢 Green Vibe
 user = login_required()
+genai.configure(api_key=st.secrets["gemini"]["api_key"])
 
-st.write(f"👋 Hi **{user['name']}**! Ready to digitize Job Descriptions?")
+st.title("🟢 YouthJobs: Input Portal")
+st.write(f"Logged in as: **{user['name']}**")
 
-# --- SESSION STATE INITIALIZATION ---
-if "job_df" not in st.session_state:
-    st.session_state["job_df"] = None
-if "input_mode" not in st.session_state:
-    st.session_state["input_mode"] = "upload"
-if "active_file" not in st.session_state:
-    st.session_state["active_file"] = {"data": None, "mime": None}
-if "uploader_key" not in st.session_state:
-    st.session_state["uploader_key"] = 0
+# 2. INPUT SECTION
+st.subheader("1. Upload Job Description")
+input_method = st.radio("Source:", ["Paste Text", "Upload Image/PDF", "Camera"], horizontal=True)
 
-# 2. HELPER: RESET STATE
-def switch_mode(new_mode):
-    st.session_state["input_mode"] = new_mode
-    st.session_state["active_file"] = {"data": None, "mime": None}
-    st.session_state["job_df"] = None
+extracted_text = ""
+uploaded_file = None
 
-def full_reset():
-    st.session_state["job_df"] = None
-    st.session_state["active_file"] = {"data": None, "mime": None}
-    st.session_state["uploader_key"] += 1 
+if input_method == "Paste Text":
+    extracted_text = st.text_area("Paste JD content here:", height=200)
 
-# 3. LAYOUT
-col_nav, col_content = st.columns([1, 3])
+elif input_method == "Upload Image/PDF":
+    uploaded_file = st.file_uploader("Choose file", type=['png', 'jpg', 'jpeg', 'pdf'])
 
-with col_nav:
-    st.info("Select Source:")
-    if st.button("📂 Upload PDF/Image", use_container_width=True):
-        switch_mode("upload")
-    if st.button("🔗 Google Drive", use_container_width=True):
-        switch_mode("drive")
-    if st.button("📸 Camera", use_container_width=True):
-        switch_mode("camera")
+elif input_method == "Camera":
+    uploaded_file = st.camera_input("Take a photo of the Job Poster")
 
-# 4. INPUT LOGIC
-with col_content:
-    mode = st.session_state["input_mode"]
-    st.subheader(f"Mode: {mode.title()}")
+# 3. AI EXTRACTION LOGIC
+if st.button("🚀 Analyze Jobs", type="primary"):
+    if not extracted_text and not uploaded_file:
+        st.error("Please provide some input first!")
+        st.stop()
 
-    if mode == "upload":
-        # Simplified key generation to prevent syntax errors
-        ukey = st.session_state['uploader_key']
-        up = st.file_uploader(
-            "Select JD file", 
-            type=["pdf", "png", "jpg"], 
-            key=f"jd_widget_{ukey}"
-        )
-        if up: st.session_state["active_file"] = {"data": up.getvalue(), "mime": up.type}
-
-    elif mode == "drive":
-        st.info("Paste a link to a JD file from Google Drive.")
-        link = st.text_input("Google Drive Link")
-        if link and st.button("Fetch from Drive"):
-            data, mime, err = get_file_from_link(link)
-            if err: 
-                st.error(err)
-            else:
-                st.success("✅ File Loaded!")
-                st.session_state["active_file"] = {"data": data, "mime": mime}
-                
-    elif mode == "camera":
-        cam = st.camera_input("Take Photo of JD")
-        if cam: st.session_state["active_file"] = {"data": cam.getvalue(), "mime": "image/jpeg"}
-
-# 5. PROCESSING
-active_file = st.session_state["active_file"]
-
-if active_file["data"] is not None:
-    st.divider()
-    if "image" in active_file["mime"]:
-        st.image(active_file["data"], width=300)
-    else:
-        st.markdown(f"**📄 Document Loaded: {active_file['mime']}**")
-    
-    # --- JOB SPECIFIC FIELDS ---
-    default_cols = "Job Title, Company Name, Location, Salary Range, Required Skills, Min Experience, Contact Email, Phone number"
-    cols = st.text_area("Fields to Extract", value=default_cols).split(",")
-    
-    if st.button("🚀 Analyze Job Description", type="primary"):
-        with st.spinner("AI is analyzing requirements..."):
-            result = parse_document_dynamic(
-                active_file["data"], 
-                cols, 
-                active_file["mime"], 
-                prompt_context="Job Description Document"
-            )
+    with st.spinner(f"Gemini ({GEMINI_MODEL_NAME}) is finding all jobs in this document..."):
+        try:
+            model = genai.GenerativeModel(GEMINI_MODEL_NAME)
             
-            if "error" in result[0]: st.error(result[0]["error"])
-            else: st.session_state["job_df"] = pd.DataFrame(result)
+            # A. PREPARE PROMPT
+            base_prompt = """
+            You are an expert HR Data Assistant.
+            Analyze the provided Job Description (JD) content.
+            
+            CRITICAL INSTRUCTION:
+            This single document might contain MULTIPLE distinct job roles (e.g., "We are hiring: 1. Sales Manager, 2. Driver").
+            You must extract EACH job role as a separate object.
+            
+            Extract the following fields for EACH job:
+            - Job Title
+            - Company Name
+            - Location
+            - Min Experience (e.g., "0-1 Years")
+            - Salary Range (e.g., "15k-20k")
+            - Required Skills (comma separated)
+            - Contact Email (if found)
+            
+            Output strictly a JSON LIST of objects:
+            [
+              {"Job Title": "...", "Company Name": "...", ...},
+              {"Job Title": "...", "Company Name": "...", ...}
+            ]
+            """
 
-# 6. SAVE SECTION
-if st.session_state["job_df"] is not None:
-    st.divider()
-    st.subheader("Verify & Save")
-    
-    edited_df = st.data_editor(st.session_state["job_df"], num_rows="dynamic")
-    
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        sheet_name = st.text_input("Target Sheet", value="YouthJobs_Master_DB")
-    with col2:
-        st.write("")
-        st.write("")
-        
-        if st.button("💾 Save to Cloud"):
-            with st.spinner("Saving..."):
-                fid = st.secrets.get("youthjobs", {}).get("folder_id")
-                url = get_or_create_spreadsheet(sheet_name, fid)
+            # B. SEND TO GEMINI
+            response = None
+            if uploaded_file:
+                # Image/PDF processing
+                import PIL.Image
+                import fitz # PyMuPDF for PDF
                 
-                if url and append_batch_to_sheet(url, edited_df.to_dict('records')):
-                    st.success("✅ Saved successfully!")
-                    st.balloons()
-                    time.sleep(2) 
-                    full_reset()
-                    st.rerun()
+                if uploaded_file.type == "application/pdf":
+                    # Simple PDF text extraction for speed
+                    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+                    pdf_text = ""
+                    for page in doc:
+                        pdf_text += page.get_text()
+                    response = model.generate_content([base_prompt, pdf_text])
                 else:
-                    st.error("❌ Save failed. Please check your internet connection or permissions.")
+                    # Image processing
+                    img = PIL.Image.open(uploaded_file)
+                    response = model.generate_content([base_prompt, img])
+            else:
+                # Text processing
+                response = model.generate_content([base_prompt, extracted_text])
+
+            # C. PARSE JSON
+            cleaned_json = response.text.replace("```json", "").replace("```", "").strip()
+            data_list = json.loads(cleaned_json)
+            
+            # Ensure it's a list (in case AI returns single object)
+            if isinstance(data_list, dict):
+                data_list = [data_list]
+                
+            # Save to session state for review
+            st.session_state['extracted_jobs'] = data_list
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"AI Error: {e}")
+
+# 4. REVIEW & SAVE SECTION
+if 'extracted_jobs' in st.session_state:
+    st.divider()
+    st.subheader("2. Review & Save")
+    st.info(f"✅ Found {len(st.session_state['extracted_jobs'])} distinct roles.")
+
+    # Convert list to DataFrame for the Editor
+    df_preview = pd.DataFrame(st.session_state['extracted_jobs'])
+    
+    # Ensure all columns exist (for consistency)
+    required_cols = ["Job Title", "Company Name", "Location", "Salary Range", "Required Skills", "Contact Email"]
+    for col in required_cols:
+        if col not in df_preview.columns:
+            df_preview[col] = ""
+
+    # Reorder columns nicely
+    df_preview = df_preview[required_cols + [c for c in df_preview.columns if c not in required_cols]]
+
+    # --- THE MAGIC EDITOR ---
+    # This allows editing MULTIPLE rows at once
+    edited_df = st.data_editor(
+        df_preview,
+        num_rows="dynamic", # Allow user to add/delete rows manually too!
+        use_container_width=True,
+        key="job_editor"
+    )
+
+    if st.button("💾 Save All Jobs to Database", type="primary"):
+        # Load Database URL
+        fid = st.secrets.get("youthjobs", {}).get("folder_id")
+        url = get_or_create_spreadsheet("YouthJobs_Master_DB", fid)
+        
+        if url:
+            # Convert DataFrame back to list of dicts
+            final_data = edited_df.to_dict(orient='records')
+            
+            # Add metadata (who added it, when)
+            for row in final_data:
+                row['Added By'] = user['name']
+                row['Date Added'] = time.strftime("%Y-%m-%d")
+            
+            # Batch
