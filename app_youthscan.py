@@ -91,7 +91,8 @@ if active_file["data"] is not None:
             if "error" in result[0]: 
                 st.error(result[0]["error"])
             else: 
-                st.session_state["scanned_df"] = pd.DataFrame(result)
+                # Reset index to ensure it's a clean 0-based index for logic
+                st.session_state["scanned_df"] = pd.DataFrame(result).reset_index(drop=True)
 
 # 6. VERIFY & SAVE SECTION (Dropdown Edit Mode)
 if st.session_state["scanned_df"] is not None:
@@ -102,7 +103,12 @@ if st.session_state["scanned_df"] is not None:
     
     # 1. Accessible Static Table Display
     st.markdown("**Review Extracted Data:**")
-    st.table(df) 
+    
+    # --- THE FIX: Create a display-only copy with a 1-based index ---
+    display_df = df.copy()
+    display_df.index = display_df.index + 1
+    st.table(display_df) 
+    # ----------------------------------------------------------------
     
     st.divider()
     st.markdown("**Edit Data (If Needed):**")
