@@ -70,6 +70,7 @@ if st.button("🚀 Analyze Jobs", type="primary"):
             CRITICAL INSTRUCTION:
             This single document might contain MULTIPLE distinct job roles (e.g., "We are hiring: 1. Sales Manager, 2. Driver").
             You must extract EACH job role as a separate object.
+            When there are multiple locations listed, extract information per location, and treat them as distict job opening.
             
             Extract the following fields for EACH job:
             - Job Title
