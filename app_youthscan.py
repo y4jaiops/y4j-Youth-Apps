@@ -93,7 +93,7 @@ if active_file["data"] is not None:
             else: 
                 st.session_state["scanned_df"] = pd.DataFrame(result)
 
-# 6. VERIFY & SAVE SECTION (OPTION 1: Static Table + Edit Form)
+# 6. VERIFY & SAVE SECTION (Dropdown Edit Mode)
 if st.session_state["scanned_df"] is not None:
     st.divider()
     st.subheader("Verify & Save Data")
@@ -102,51 +102,67 @@ if st.session_state["scanned_df"] is not None:
     
     # 1. Accessible Static Table Display
     st.markdown("**Review Extracted Data:**")
-    st.table(df) # Renders as a semantic HTML <table> for perfect screen reader parsing
+    st.table(df) 
     
-    # 2. Accessible Edit Form
-    with st.form("verify_save_form"):
-        st.caption("Make any necessary corrections in the fields below before saving.")
+    st.divider()
+    st.markdown("**Edit Data (If Needed):**")
+    
+    # 2. Candidate Selection Dropdown
+    def make_dropdown_label(idx, row):
+        fname = str(row.get('First Name', '')) if 'First Name' in row and pd.notna(row.get('First Name')) else ''
+        lname = str(row.get('Last Name', '')) if 'Last Name' in row and pd.notna(row.get('Last Name')) else ''
+        full_name = f"{fname} {lname}".strip()
+        return f"Candidate {idx + 1}: {full_name}" if full_name else f"Candidate {idx + 1}"
         
-        updated_records = []
-        for idx, row in df.iterrows():
-            if len(df) > 1:
-                st.markdown(f"### Candidate {idx + 1}")
+    # Create labels mapping to the row indices
+    dropdown_labels = [make_dropdown_label(i, r) for i, r in df.iterrows()]
+    
+    selected_label = st.selectbox("Select a candidate to correct:", dropdown_labels)
+    selected_idx = dropdown_labels.index(selected_label)
+    selected_row = df.loc[selected_idx]
+    
+    # 3. Accessible Edit Form for the Selected Candidate
+    with st.form("edit_candidate_form"):
+        st.caption(f"Editing: **{selected_label}**")
+        
+        updated_data = {}
+        for col in df.columns:
+            current_val = str(selected_row[col]) if pd.notna(selected_row[col]) else ""
+            updated_data[col] = st.text_input(label=col, value=current_val)
             
-            row_data = {}
+        apply_edits = st.form_submit_button("Apply Edits to Table")
+        
+        if apply_edits:
             for col in df.columns:
-                current_val = str(row[col]) if pd.notna(row[col]) else ""
-                
-                # Highly descriptive label combining Candidate number and Field name
-                label_text = f"Candidate {idx + 1} - {col}" if len(df) > 1 else col
-                
-                row_data[col] = st.text_input(
-                    label=label_text, 
-                    value=current_val, 
-                    key=f"edit_{idx}_{col}"
-                )
-            
-            updated_records.append(row_data)
-            st.divider()
+                st.session_state["scanned_df"].at[selected_idx, col] = updated_data[col]
+            st.success(f"Updated {selected_label} in the table above!")
+            time.sleep(1)
+            st.rerun()
+
+    st.divider()
+    
+    # 4. Final Save to Google Drive Controls
+    st.markdown("**Finalize & Save:**")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value="YouthScan_Data")
+    with col2:
+        st.write("") # Spacer
+        st.write("") # Spacer
+        final_save = st.button("Save Batch to Google Drive", type="primary")
         
-        # 3. Save Controls
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value="YouthScan_Data")
-        with col2:
-            st.write("") # Spacer
-            st.write("") # Spacer
-            submitted = st.form_submit_button("Save to Google Drive", type="primary")
+    if final_save:
+        with st.spinner("Saving all records to Google Drive..."):
+            fid = st.secrets.get("youthscan", {}).get("folder_id")
+            url = get_or_create_spreadsheet(sheet_name, fid)
             
-        if submitted:
-            with st.spinner("Saving..."):
-                fid = st.secrets.get("youthscan", {}).get("folder_id")
-                url = get_or_create_spreadsheet(sheet_name, fid)
-                if url and append_batch_to_sheet(url, updated_records):
-                    st.success("✅ Saved successfully!")
-                    st.balloons()
-                    
-                    # --- THE CLEANUP LOGIC ---
-                    time.sleep(2) 
-                    full_reset() 
-                    st.rerun()
+            # Convert dataframe to dictionary records for appending
+            records_to_save = st.session_state["scanned_df"].to_dict('records')
+            
+            if url and append_batch_to_sheet(url, records_to_save):
+                st.success("✅ Saved successfully!")
+                st.balloons()
+                
+                time.sleep(2) 
+                full_reset() 
+                st.rerun()
