@@ -1,4 +1,3 @@
-# app_youthscan.py (The Orange App 🟠)
 import streamlit as st
 import pandas as pd
 import time
@@ -12,70 +11,64 @@ from logic.logic_sheets import get_or_create_spreadsheet, append_batch_to_sheet
 set_app_theme("scan")
 user = login_required()
 
-st.write(f"👋 Hi **{user['name']}**! Ready to scan candidates?")
+st.write(f"Hi **{user['name']}**! Ready to scan candidates?")
 
 # --- SESSION STATE INITIALIZATION ---
 if "scanned_df" not in st.session_state:
     st.session_state["scanned_df"] = None
-if "input_mode" not in st.session_state:
-    st.session_state["input_mode"] = "upload"
 if "active_file" not in st.session_state:
     st.session_state["active_file"] = {"data": None, "mime": None}
-# NEW: Key to force-clear the uploader widget
 if "uploader_key" not in st.session_state:
     st.session_state["uploader_key"] = 0
 
 # 2. HELPER: RESET STATE
-def switch_mode(new_mode):
-    st.session_state["input_mode"] = new_mode
-    st.session_state["active_file"] = {"data": None, "mime": None}
-    st.session_state["scanned_df"] = None
-    # Don't increment uploader key here, only on save/clear
-    
 def full_reset():
     """Clears everything including the file uploader widget"""
     st.session_state["scanned_df"] = None
     st.session_state["active_file"] = {"data": None, "mime": None}
-    st.session_state["uploader_key"] += 1 # <--- This wipes the uploader
-    
-# 3. LAYOUT
-col_nav, col_content = st.columns([1, 3])
+    st.session_state["uploader_key"] += 1 
+
+def handle_mode_change():
+    """Clears current files if the user switches input modes."""
+    st.session_state["scanned_df"] = None
+    st.session_state["active_file"] = {"data": None, "mime": None}
+
+# 3. LAYOUT & NAVIGATION
+col_nav, col_content = st.columns([1, 2])
 
 with col_nav:
-    st.info("Select Source for Document to scan:")
-    if st.button("📂 Scan Photo/PDF stored on phone/computer", use_container_width=True):
-        switch_mode("Browse from phone/computer")
-    if st.button("🔗 Scan Photo/PDF from Google Drive", use_container_width=True):
-        switch_mode("Download from Google drive")
-    if st.button("📸 Scan with new photo from Camera", use_container_width=True):
-        switch_mode("Take photo from camera")
+    # Replaced stack of buttons with a highly accessible Radio group
+    input_mode = st.radio(
+        "Select Document Source:",
+        ["Browse from Device", "Download from Google Drive", "Take Photo from Camera"],
+        on_change=handle_mode_change
+    )
 
 # 4. INPUT LOGIC
 with col_content:
-    mode = st.session_state["input_mode"]
-    st.subheader(f"Mode: {mode.title()}")
+    st.subheader(f"Mode: {input_mode}")
 
-    if mode == "Browse from phone/computer":
-        # We use the dynamic key here. When it changes, this widget is destroyed and recreated empty.
+    if input_mode == "Browse from Device":
         up = st.file_uploader(
-            "Select file", 
+            "Select file to upload", 
             type=["jpg", "png", "jpeg", "pdf"], 
             key=f"u_widget_{st.session_state['uploader_key']}" 
         )
         if up: st.session_state["active_file"] = {"data": up.getvalue(), "mime": up.type}
 
-    elif mode == "Take photo from camera":
+    elif input_mode == "Take Photo from Camera":
         cam = st.camera_input("Take Photo")
         if cam: st.session_state["active_file"] = {"data": cam.getvalue(), "mime": "image/jpeg"}
 
-    elif mode == "Download from Google drive":
+    elif input_mode == "Download from Google Drive":
         st.info("Paste a link below to a file (not a folder) from Google Drive.")
-        link = st.text_input("Google Drive Link below this line:")
+        link = st.text_input("Google Drive Link:")
         if link and st.button("Fetch from Drive"):
             data, mime, err = get_file_from_link(link)
-            if err: st.error(err)
+            if err: 
+                st.error(err)
             else:
-                st.success("✅ File Loaded!")
+                st.success("✅ File Loaded Successfully!")
                 st.session_state["active_file"] = {"data": data, "mime": mime}
 
 # 5. PROCESSING
@@ -86,40 +79,62 @@ if active_file["data"] is not None:
     if "image" in active_file["mime"]:
         st.image(active_file["data"], width=300)
     else:
-        st.markdown(f"**📄 Document Loaded: {active_file['mime']}**")
+        st.markdown(f"**Document Loaded: {active_file['mime']}**")
     
-    default_cols = "First Name,	Last Name,	ID Type,	ID Number,	Email,	Phone Number,	Date Of Birth,	Gender,	Disability Type,	Qualification,	State"
+    default_cols = "First Name, Last Name, ID Type, ID Number, Email, Phone Number, Date Of Birth, Gender, Disability Type, Qualification, State"
 
-    cols = st.text_area("Fields to Extract", value=default_cols).split(",")
+    cols = st.text_area("Fields to Extract (comma separated)", value=default_cols).split(",")
     
-    if st.button("🚀 Analyze with Gemini", type="primary"):
-        with st.spinner("Gemini is reading..."):
+    if st.button("Analyze Document", type="primary"):
+        with st.spinner("Reading document..."):
             result = parse_document_dynamic(active_file["data"], cols, active_file["mime"], prompt_context="Youth Candidate Resume/ID")
-            if "error" in result[0]: st.error(result[0]["error"])
-            else: st.session_state["scanned_df"] = pd.DataFrame(result)
+            if "error" in result[0]: 
+                st.error(result[0]["error"])
+            else: 
+                st.session_state["scanned_df"] = pd.DataFrame(result)
 
-# 6. SAVE SECTION
+# 6. VERIFY & SAVE SECTION
 if st.session_state["scanned_df"] is not None:
     st.divider()
-    st.subheader("Verify & Save")
+    st.subheader("Verify & Save Data")
     
-    edited_df = st.data_editor(st.session_state["scanned_df"], num_rows="dynamic")
+    df = st.session_state["scanned_df"]
     
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        sheet_name = st.text_input("Saving/Appending to Google Sheet: Edit sheet name below", value="YouthScan_Data")
-    with col2:
-        st.write("")
-        st.write("")
-        if st.button("💾 Save to My Drive/y4j-Youth-Apps-file-store/y4j-YouthScan folder"):
+    # Replaced st.data_editor with an accessible st.form
+    with st.form("verify_save_form"):
+        st.caption("Review the extracted details below. Make corrections if necessary before saving.")
+        
+        updated_records = []
+        for idx, row in df.iterrows():
+            if len(df) > 1:
+                st.markdown(f"**Candidate {idx + 1}**")
+            
+            row_data = {}
+            for col in df.columns:
+                current_val = str(row[col]) if pd.notna(row[col]) else ""
+                # Creating a unique key for each text input based on row index and column name
+                row_data[col] = st.text_input(label=col, value=current_val, key=f"edit_{idx}_{col}")
+            
+            updated_records.append(row_data)
+            st.divider()
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value="YouthScan_Data")
+        with col2:
+            st.write("") # Spacer
+            st.write("") # Spacer
+            submitted = st.form_submit_button("Save to Google Drive", type="primary")
+            
+        if submitted:
             with st.spinner("Saving..."):
                 fid = st.secrets.get("youthscan", {}).get("folder_id")
                 url = get_or_create_spreadsheet(sheet_name, fid)
-                if url and append_batch_to_sheet(url, edited_df.to_dict('records')):
+                if url and append_batch_to_sheet(url, updated_records):
                     st.success("✅ Saved successfully!")
                     st.balloons()
                     
-                    # --- 🧹 THE CLEANUP LOGIC ---
+                    # --- THE CLEANUP LOGIC ---
                     time.sleep(2) 
-                    full_reset() # This now rotates the key
+                    full_reset() 
                     st.rerun()
