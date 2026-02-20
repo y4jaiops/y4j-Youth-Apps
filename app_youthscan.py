@@ -94,4 +94,4 @@ if active_file["data"] is not None:
                 st.session_state["scanned_df"] = pd.DataFrame(result)
 
 # 6. VERIFY & SAVE SECTION (OPTION 1: Static Table + Edit Form)
-if st.session_state["scanned_df"] is not
+if st.session_state["scanned_df"] is not None:
