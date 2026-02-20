@@ -83,6 +83,7 @@ if st.button("🚀 Analyze Jobs", type="primary"):
             - Website Link (if found)
             - Last date to apply (if found)
             - PWD (if found)
+            - Application Fee (if found)
             
             Output strictly a JSON LIST of objects:
             [
@@ -134,7 +135,7 @@ if 'extracted_jobs' in st.session_state:
     df_preview = pd.DataFrame(st.session_state['extracted_jobs'])
     
     # Ensure columns exist
-    required_cols = ["Job Title", "Company Name", "Location", "Salary Range", "Required Skills", "Contact Email", "Contact Number", "Website link", "Last Date to Apply"]
+    required_cols = ["Job Title", "Company Name", "Location", "Salary Range", "Required Skills", "Contact Email"]
     for col in required_cols:
         if col not in df_preview.columns:
             df_preview[col] = ""
