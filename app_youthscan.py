@@ -95,3 +95,58 @@ if active_file["data"] is not None:
 
 # 6. VERIFY & SAVE SECTION (OPTION 1: Static Table + Edit Form)
 if st.session_state["scanned_df"] is not None:
+    st.divider()
+    st.subheader("Verify & Save Data")
+    
+    df = st.session_state["scanned_df"]
+    
+    # 1. Accessible Static Table Display
+    st.markdown("**Review Extracted Data:**")
+    st.table(df) # Renders as a semantic HTML <table> for perfect screen reader parsing
+    
+    # 2. Accessible Edit Form
+    with st.form("verify_save_form"):
+        st.caption("Make any necessary corrections in the fields below before saving.")
+        
+        updated_records = []
+        for idx, row in df.iterrows():
+            if len(df) > 1:
+                st.markdown(f"### Candidate {idx + 1}")
+            
+            row_data = {}
+            for col in df.columns:
+                current_val = str(row[col]) if pd.notna(row[col]) else ""
+                
+                # Highly descriptive label combining Candidate number and Field name
+                label_text = f"Candidate {idx + 1} - {col}" if len(df) > 1 else col
+                
+                row_data[col] = st.text_input(
+                    label=label_text, 
+                    value=current_val, 
+                    key=f"edit_{idx}_{col}"
+                )
+            
+            updated_records.append(row_data)
+            st.divider()
+        
+        # 3. Save Controls
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value="YouthScan_Data")
+        with col2:
+            st.write("") # Spacer
+            st.write("") # Spacer
+            submitted = st.form_submit_button("Save to Google Drive", type="primary")
+            
+        if submitted:
+            with st.spinner("Saving..."):
+                fid = st.secrets.get("youthscan", {}).get("folder_id")
+                url = get_or_create_spreadsheet(sheet_name, fid)
+                if url and append_batch_to_sheet(url, updated_records):
+                    st.success("✅ Saved successfully!")
+                    st.balloons()
+                    
+                    # --- THE CLEANUP LOGIC ---
+                    time.sleep(2) 
+                    full_reset() 
+                    st.rerun()
