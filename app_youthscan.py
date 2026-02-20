@@ -37,7 +37,7 @@ def handle_mode_change():
 col_nav, col_content = st.columns([1, 2])
 
 with col_nav:
-    # Replaced stack of buttons with a highly accessible Radio group
+    # Highly accessible Radio group for navigation
     input_mode = st.radio(
         "Select Document Source:",
         ["Browse from Device", "Download from Google Drive", "Take Photo from Camera"],
@@ -93,48 +93,5 @@ if active_file["data"] is not None:
             else: 
                 st.session_state["scanned_df"] = pd.DataFrame(result)
 
-# 6. VERIFY & SAVE SECTION
-if st.session_state["scanned_df"] is not None:
-    st.divider()
-    st.subheader("Verify & Save Data")
-    
-    df = st.session_state["scanned_df"]
-    
-    # Replaced st.data_editor with an accessible st.form
-    with st.form("verify_save_form"):
-        st.caption("Review the extracted details below. Make corrections if necessary before saving.")
-        
-        updated_records = []
-        for idx, row in df.iterrows():
-            if len(df) > 1:
-                st.markdown(f"**Candidate {idx + 1}**")
-            
-            row_data = {}
-            for col in df.columns:
-                current_val = str(row[col]) if pd.notna(row[col]) else ""
-                # Creating a unique key for each text input based on row index and column name
-                row_data[col] = st.text_input(label=col, value=current_val, key=f"edit_{idx}_{col}")
-            
-            updated_records.append(row_data)
-            st.divider()
-        
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value="YouthScan_Data")
-        with col2:
-            st.write("") # Spacer
-            st.write("") # Spacer
-            submitted = st.form_submit_button("Save to Google Drive", type="primary")
-            
-        if submitted:
-            with st.spinner("Saving..."):
-                fid = st.secrets.get("youthscan", {}).get("folder_id")
-                url = get_or_create_spreadsheet(sheet_name, fid)
-                if url and append_batch_to_sheet(url, updated_records):
-                    st.success("✅ Saved successfully!")
-                    st.balloons()
-                    
-                    # --- THE CLEANUP LOGIC ---
-                    time.sleep(2) 
-                    full_reset() 
-                    st.rerun()
+# 6. VERIFY & SAVE SECTION (OPTION 1: Static Table + Edit Form)
+if st.session_state["scanned_df"] is not
