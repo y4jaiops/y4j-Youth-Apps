@@ -130,7 +130,7 @@ if 'extracted_jobs' in st.session_state:
     df_preview = pd.DataFrame(st.session_state['extracted_jobs'])
     
     # Ensure columns exist
-    required_cols = ["Job Title", "Company Name", "Location", "Salary Range", "Required Skills", "Contact Email", "Contact Number"]
+    required_cols = ["Job Title", "Company Name", "Location", "Salary Range", "Required Skills", "Contact Email", "Contact Number", "Website link"]
     for col in required_cols:
         if col not in df_preview.columns:
             df_preview[col] = ""
