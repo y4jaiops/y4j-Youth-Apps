@@ -82,6 +82,7 @@ if st.button("🚀 Analyze Jobs", type="primary"):
             - Contact phone (if found)
             - Website Link (if found)
             - Last date to apply (if found)
+            - PWD (if found)
             
             Output strictly a JSON LIST of objects:
             [
