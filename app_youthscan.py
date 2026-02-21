@@ -38,9 +38,10 @@ col_nav, col_content = st.columns([1, 2])
 
 with col_nav:
     # Highly accessible Radio group for navigation
+    # NEW: Added "Paste Text" to the options
     input_mode = st.radio(
         "Select Document Source:",
-        ["Browse from Device", "Download from Google Drive", "Take Photo from Camera"],
+        ["Browse from Device", "Download from Google Drive", "Take Photo from Camera", "Paste Text"],
         on_change=handle_mode_change
     )
 
@@ -70,6 +71,16 @@ with col_content:
             else:
                 st.success("✅ File Loaded Successfully!")
                 st.session_state["active_file"] = {"data": data, "mime": mime}
+                
+    # NEW: Logic block for Paste Text
+    elif input_mode == "Paste Text":
+        st.info("Paste the raw text of one or more resumes below.")
+        pasted_text = st.text_area("Resume Text", height=250)
+        
+        if pasted_text and st.button("Load Text"):
+            # Encode string to bytes so it mimics file upload behavior for downstream logic
+            st.session_state["active_file"] = {"data": pasted_text.encode("utf-8"), "mime": "text/plain"}
+            st.success("✅ Text Loaded Successfully!")
 
 # 5. PROCESSING
 active_file = st.session_state["active_file"]
@@ -78,6 +89,11 @@ if active_file["data"] is not None:
     st.divider()
     if "image" in active_file["mime"]:
         st.image(active_file["data"], width=300)
+    # NEW: Add a small preview specifically for text so the user knows it's ready
+    elif active_file["mime"] == "text/plain":
+        st.markdown("**Text Loaded Preview:**")
+        preview_text = active_file["data"].decode("utf-8")
+        st.caption(preview_text[:300] + ("..." if len(preview_text) > 300 else ""))
     else:
         st.markdown(f"**Document Loaded: {active_file['mime']}**")
     
@@ -104,11 +120,9 @@ if st.session_state["scanned_df"] is not None:
     # 1. Accessible Static Table Display
     st.markdown("**Review Extracted Data:**")
     
-    # --- THE FIX: Create a display-only copy with a 1-based index ---
     display_df = df.copy()
     display_df.index = display_df.index + 1
     st.table(display_df) 
-    # ----------------------------------------------------------------
     
     st.divider()
     st.markdown("**Edit Data (If Needed):**")
