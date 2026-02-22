@@ -22,7 +22,7 @@ genai.configure(api_key=st.secrets["gemini"]["api_key"])
 
 st.title("🟢 Jobscan: Jobs Input App")
 st.write(f"Logged in as: **{user['name']}**")
-
+ 
 # 2. INPUT SECTION
 st.subheader("1. Upload Job Description")
 input_method = st.radio("Source:", ["Paste Text", "Upload Image/PDF", "Camera"], horizontal=True)
