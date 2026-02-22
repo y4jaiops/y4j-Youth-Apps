@@ -190,8 +190,8 @@ if st.session_state["scanned_df"] is not None:
         st.write("") # Spacer
         st.write("") # Spacer
         final_save = st.button("Save Batch to Google Drive", type="primary")
-        
-    if final_save:
+
+if final_save:
         with st.spinner("Saving all records to Google Drive..."):
             fid = st.secrets.get("youthscan", {}).get("folder_id")
             url = get_or_create_spreadsheet(sheet_name, fid)
@@ -201,8 +201,21 @@ if st.session_state["scanned_df"] is not None:
             
             if url and append_batch_to_sheet(url, records_to_save):
                 st.success("✅ Saved successfully!")
-                st.balloons()
                 
-                time.sleep(2) 
+                # Visual Feedback
+                st.balloons() 
+                
+                # NEW: Audio Feedback (Accessibility)
+                # st.audio reads the local file and autoplay=True plays it immediately without user interaction
+                try:
+                    st.audio("koiroylers-awesome-notification-351720.mp3", autoplay=True)
+                except Exception as e:
+                    pass # Silently pass if the audio file is missing so it doesn't break the save flow
+                
+                # Wait long enough for the sound to play and balloons to fly before resetting
+                time.sleep(2.5) 
+                
                 full_reset() 
                 st.rerun()
+
+    
