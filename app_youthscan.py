@@ -72,16 +72,33 @@ with col_content:
                 st.success("✅ File Loaded Successfully!")
                 st.session_state["active_file"] = {"data": data, "mime": mime}
                 
-    # NEW: Logic block for Paste Text
+    
+    #NEW Logic for Paste Text and Clear Text
     elif input_mode == "Paste Text":
         st.info("Paste the raw text of one or more resumes below.")
-        pasted_text = st.text_area("Resume Text", height=250)
         
-        if pasted_text and st.button("Load Text"):
-            # Encode string to bytes so it mimics file upload behavior for downstream logic
-            st.session_state["active_file"] = {"data": pasted_text.encode("utf-8"), "mime": "text/plain"}
-            st.success("✅ Text Loaded Successfully!")
-
+        # 1. Assign a key to the text area so we can control its state
+        pasted_text = st.text_area("Resume Text", height=250, key="paste_area")
+        
+        # 2. Place the buttons side-by-side using columns
+        col1, col2 = st.columns([1, 5])
+        
+        with col1:
+            if st.button("Load Text"):
+                if pasted_text.strip():
+                    st.session_state["active_file"] = {"data": pasted_text.encode("utf-8"), "mime": "text/plain"}
+                    st.success("✅ Text Loaded Successfully!")
+                else:
+                    st.warning("Please paste some text first.")
+                    
+        with col2:
+            if st.button("Clear Text"):
+                # 3. Clear the text area and reset the active session states
+                st.session_state["paste_area"] = ""
+                st.session_state["active_file"] = {"data": None, "mime": None}
+                st.session_state["scanned_df"] = None
+                st.rerun() # Immediately refresh the UI to show the empty box
+    
 # 5. PROCESSING
 active_file = st.session_state["active_file"]
 
