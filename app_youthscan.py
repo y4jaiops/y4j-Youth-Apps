@@ -77,10 +77,16 @@ with col_content:
     elif input_mode == "Paste Text":
         st.info("Paste the raw text of one or more resumes below.")
         
-        # 1. Assign a key to the text area so we can control its state
+        # 1. Define the callback function right here
+        def clear_text_callback():
+            st.session_state["paste_area"] = ""
+            st.session_state["active_file"] = {"data": None, "mime": None}
+            st.session_state["scanned_df"] = None
+            
+        # 2. The text area tied to the "paste_area" key
         pasted_text = st.text_area("Resume Text", height=250, key="paste_area")
         
-        # 2. Place the buttons side-by-side using columns
+        # 3. Layout the buttons
         col1, col2 = st.columns([1, 5])
         
         with col1:
@@ -92,12 +98,9 @@ with col_content:
                     st.warning("Please paste some text first.")
                     
         with col2:
-            if st.button("Clear Text"):
-                # 3. Clear the text area and reset the active session states
-                st.session_state["paste_area"] = ""
-                st.session_state["active_file"] = {"data": None, "mime": None}
-                st.session_state["scanned_df"] = None
-                st.rerun() # Immediately refresh the UI to show the empty box
+            # 4. Bind the callback to the button using on_click (No st.rerun() needed!)
+            st.button("Clear Text", on_click=clear_text_callback)
+            
     
 # 5. PROCESSING
 active_file = st.session_state["active_file"]
