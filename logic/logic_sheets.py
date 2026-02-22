@@ -47,35 +47,38 @@ def init_google_sheet_client():
 def get_or_create_spreadsheet(sheet_name, folder_id=None):
     """
     Finds a sheet by name. If missing, CREATES it using the User's own storage.
+    If folder_id is provided, the sheet is created directly inside that specific folder.
     """
     client = init_google_sheet_client()
     if not client: return None
 
     try:
         # 1. Try to open existing sheet
-        sh = client.open(sheet_name)
+        # We also pass folder_id here so it strictly opens files in the Y4J folder
+        if folder_id:
+            sh = client.open(sheet_name, folder_id=folder_id)
+        else:
+            sh = client.open(sheet_name)
+            
         return sh.url
+        
     except gspread.SpreadsheetNotFound:
         # 2. Create new if not found
         try:
-            # Create sheet (This uses YOUR Drive storage now)
-            sh = client.create(sheet_name)
-            
-            # Optional: Move to specific folder
+            # THE FIX: Create the sheet directly in the target folder
             if folder_id:
-                try:
-                    # Using Drive API directly to move file is complex in gspread.
-                    # For now, it creates in "My Drive" root.
-                    # Detailed move logic would require PyDrive or Google Drive API client.
-                    pass 
-                except Exception as e:
-                    print(f"Folder move warning: {e}")
+                sh = client.create(sheet_name, folder_id=folder_id)
+            else:
+                sh = client.create(sheet_name)
             
-            # Share with others if needed (e.g. your service email if you still used it)
-            # But since it's YOUR file, you are already the owner.
+            # (Optional) You can automatically share this new sheet with an admin 
+            # by un-commenting the line below and adding an admin email:
+            # sh.share('admin_email@example.com', perm_type='user', role='writer')
             
             return sh.url
+            
         except Exception as e:
+            import streamlit as st
             st.error(f"❌ Error creating sheet: {e}")
             return None
 
