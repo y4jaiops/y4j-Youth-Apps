@@ -186,7 +186,17 @@ if st.session_state["scanned_df"] is not None:
     st.markdown("**Finalize & Save:**")
     col1, col2 = st.columns([3, 1])
     with col1:
-        sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value="YouthScan_Data")
+        #sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value="YouthScan_Data")
+        
+        # Dynamically generate the sheet name using the volunteer's login email
+        volunteer_email = user.get("email", "volunteer")
+        
+        # You can split at the '@' if you want cleaner sheet names (e.g., YouthScan_shiva) 
+        # or leave it as is for the full email. Let's use the full email here:
+        default_sheet_name = f"YouthScan_{volunteer_email}"
+        
+        sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value=default_sheet_name)
+    
     with col2:
         st.write("") # Spacer
         st.write("") # Spacer
