@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+import base64
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
 from logic.logic_drive import get_file_from_link
@@ -8,10 +9,29 @@ from logic.logic_gemini import parse_document_dynamic
 from logic.logic_sheets import get_or_create_spreadsheet, append_batch_to_sheet
 
 # 1. SETUP
-set_app_theme("scan")
+set_app_theme("youthscan")
 user = login_required()
 
 st.write(f"Hi **{user['name']}**! Ready to scan candidates?")
+
+# Helper Function for Visual and Audio Feedback
+def trigger_success_feedback():
+    """Triggers the balloons animation and plays an invisible success chime reliably."""
+    st.balloons()
+    try:
+        with open("koiroylers-awesome-notification-351720.mp3", "rb") as f:
+            data = f.read()
+            b64 = base64.b64encode(data).decode()
+        
+        unique_id = str(time.time()).replace('.', '')
+        md = f"""
+            <audio id="{unique_id}" autoplay="true" style="display:none;">
+            <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+            </audio>
+            """
+        st.markdown(md, unsafe_allow_html=True)
+    except Exception:
+        pass
 
 # --- SESSION STATE INITIALIZATION ---
 if "scanned_df" not in st.session_state:
@@ -37,8 +57,6 @@ def handle_mode_change():
 col_nav, col_content = st.columns([1, 2])
 
 with col_nav:
-    # Highly accessible Radio group for navigation
-    # NEW: Added "Paste Text" to the options
     input_mode = st.radio(
         "Select Document Source:",
         ["Browse from Device", "Download from Google Drive", "Take Photo from Camera", "Paste Text"],
@@ -72,21 +90,16 @@ with col_content:
                 st.success("✅ File Loaded Successfully!")
                 st.session_state["active_file"] = {"data": data, "mime": mime}
                 
-    
-    #NEW Logic for Paste Text and Clear Text
     elif input_mode == "Paste Text":
         st.info("Paste the raw text of one or more resumes below.")
         
-        # 1. Define the callback function right here
         def clear_text_callback():
             st.session_state["paste_area"] = ""
             st.session_state["active_file"] = {"data": None, "mime": None}
             st.session_state["scanned_df"] = None
             
-        # 2. The text area tied to the "paste_area" key
         pasted_text = st.text_area("Resume Text", height=250, key="paste_area")
         
-        # 3. Layout the buttons
         col1, col2 = st.columns([1, 5])
         
         with col1:
@@ -98,10 +111,8 @@ with col_content:
                     st.warning("Please paste some text first.")
                     
         with col2:
-            # 4. Bind the callback to the button using on_click (No st.rerun() needed!)
             st.button("Clear Text", on_click=clear_text_callback)
             
-    
 # 5. PROCESSING
 active_file = st.session_state["active_file"]
 
@@ -109,7 +120,6 @@ if active_file["data"] is not None:
     st.divider()
     if "image" in active_file["mime"]:
         st.image(active_file["data"], width=300)
-    # NEW: Add a small preview specifically for text so the user knows it's ready
     elif active_file["mime"] == "text/plain":
         st.markdown("**Text Loaded Preview:**")
         preview_text = active_file["data"].decode("utf-8")
@@ -117,7 +127,7 @@ if active_file["data"] is not None:
     else:
         st.markdown(f"**Document Loaded: {active_file['mime']}**")
     
-    default_cols = "First Name, Last Name, ID Type, ID Number, Email, Phone Number, Date Of Birth, Gender, Disability Type, Qualification, State"
+    default_cols = "First Name, Last Name, ID Type, ID Number, Email, Phone Number, Date Of Birth, Gender, Disability Type, Qualification, Skills, Experience years, City, State"
 
     cols = st.text_area("Fields to Extract (comma separated)", value=default_cols).split(",")
     
@@ -127,17 +137,15 @@ if active_file["data"] is not None:
             if "error" in result[0]: 
                 st.error(result[0]["error"])
             else: 
-                # Reset index to ensure it's a clean 0-based index for logic
                 st.session_state["scanned_df"] = pd.DataFrame(result).reset_index(drop=True)
 
-# 6. VERIFY & SAVE SECTION (Dropdown Edit Mode)
+# 6. VERIFY & SAVE SECTION
 if st.session_state["scanned_df"] is not None:
     st.divider()
     st.subheader("Verify & Save Data")
     
     df = st.session_state["scanned_df"]
     
-    # 1. Accessible Static Table Display
     st.markdown("**Review Extracted Data:**")
     
     display_df = df.copy()
@@ -147,21 +155,18 @@ if st.session_state["scanned_df"] is not None:
     st.divider()
     st.markdown("**Edit Data (If Needed):**")
     
-    # 2. Candidate Selection Dropdown
     def make_dropdown_label(idx, row):
         fname = str(row.get('First Name', '')) if 'First Name' in row and pd.notna(row.get('First Name')) else ''
         lname = str(row.get('Last Name', '')) if 'Last Name' in row and pd.notna(row.get('Last Name')) else ''
         full_name = f"{fname} {lname}".strip()
         return f"Candidate {idx + 1}: {full_name}" if full_name else f"Candidate {idx + 1}"
         
-    # Create labels mapping to the row indices
     dropdown_labels = [make_dropdown_label(i, r) for i, r in df.iterrows()]
     
     selected_label = st.selectbox("Select a candidate to correct:", dropdown_labels)
     selected_idx = dropdown_labels.index(selected_label)
     selected_row = df.loc[selected_idx]
     
-    # 3. Accessible Edit Form for the Selected Candidate
     with st.form("edit_candidate_form"):
         st.caption(f"Editing: **{selected_label}**")
         
@@ -179,52 +184,33 @@ if st.session_state["scanned_df"] is not None:
             time.sleep(1)
             st.rerun()
 
-
     st.divider()
-    
-    # 4. Final Save to Google Drive Controls
     st.markdown("**Finalize & Save:**")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        #sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value="YouthScan_Data")
-        
-        # Dynamically generate the sheet name using the volunteer's login email
-        volunteer_email = user.get("email", "volunteer")
-        
-        # You can split at the '@' if you want cleaner sheet names (e.g., YouthScan_shiva) 
-        # or leave it as is for the full email. Let's use the full email here:
-        default_sheet_name = f"YouthScan_{volunteer_email}"
-        
-        sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value=default_sheet_name)
     
-    with col2:
-        st.write("") # Spacer
-        st.write("") # Spacer
-        final_save = st.button("Save Batch to Google Drive", type="primary")
+    # Wrapped the final save elements in a form to preserve the state of the sheet name
+    with st.form("save_batch_form"):
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            # Added a more robust check in case the dictionary key exists but is empty
+            v_email = user.get("email") if user.get("email") else "volunteer"
+            default_sheet_name = f"YouthScan_{v_email}"
+            sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value=default_sheet_name)
         
-    # Make sure this 'if' lines up perfectly with the 'with col1:' above it!
+        with col2:
+            st.write("") 
+            st.write("") 
+            final_save = st.form_submit_button("Save Batch to Google Drive", type="primary")
+            
     if final_save:
-        with st.spinner("Saving all records to Google Drive..."):
+        with st.spinner(f"Saving all records to {sheet_name}..."):
             fid = st.secrets.get("youthscan", {}).get("folder_id")
             url = get_or_create_spreadsheet(sheet_name, fid)
             
-            # Convert dataframe to dictionary records for appending
             records_to_save = st.session_state["scanned_df"].to_dict('records')
             
             if url and append_batch_to_sheet(url, records_to_save):
                 st.success("✅ Saved successfully!")
-                
-                # Visual Feedback
-                st.balloons() 
-                
-                # Audio Feedback
-                try:
-                    st.audio("koiroylers-awesome-notification-351720.mp3", autoplay=True)
-                except Exception as e:
-                    pass 
-                
+                trigger_success_feedback()
                 time.sleep(2.5) 
-                
                 full_reset() 
                 st.rerun()
-
