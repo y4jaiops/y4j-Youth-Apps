@@ -44,33 +44,65 @@ def with_exponential_backoff(max_retries=5, base_delay=2):
 class Y4JGoogleClient:
     """
     A wrapper class that combines gspread for spreadsheet manipulation 
-    and the Google Drive API for advanced file querying.
+    and the Google Drive API for advanced file querying and moving.
     """
     def __init__(self, creds):
         self.gspread_client = gspread.authorize(creds)
         self.drive_service = build('drive', 'v3', credentials=creds)
 
-    def list_files_by_query(self, query):
+    def get_file_id_by_name(self, title, folder_id=None):
+        """Safely queries Drive to find the exact file inside the target folder."""
+        query = f"name='{title}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
+        if folder_id:
+            query += f" and '{folder_id}' in parents"
+            
         results = self.drive_service.files().list(
             q=query,
             spaces='drive',
             fields='files(id, name)',
-            pageSize=1000
+            supportsAllDrives=True, # Critical if using Shared Drives
+            includeItemsFromAllDrives=True
         ).execute()
-        return results.get('files', [])
-
-    def open_by_key(self, file_id):
-        return self.gspread_client.open_by_key(file_id)
+        
+        files = results.get('files', [])
+        return files[0]['id'] if files else None
 
     def open(self, title, folder_id=None):
-        if folder_id:
-            return self.gspread_client.open(title, folder_id=folder_id)
-        return self.gspread_client.open(title)
+        """Finds the specific ID using Drive API, then opens it with gspread."""
+        file_id = self.get_file_id_by_name(title, folder_id)
+        if file_id:
+            return self.gspread_client.open_by_key(file_id)
+        raise gspread.SpreadsheetNotFound(f"Spreadsheet '{title}' not found in folder.")
 
     def create(self, title, folder_id=None):
+        """Creates the sheet and explicitly forces it into the target folder."""
+        # 1. Create the sheet (defaults to root)
+        sh = self.gspread_client.create(title)
+        
+        # 2. Explicitly move it to the target folder using Drive API
         if folder_id:
-            return self.gspread_client.create(title, folder_id=folder_id)
-        return self.gspread_client.create(title)
+            file_id = sh.id
+            try:
+                # Retrieve the existing parents to remove
+                file = self.drive_service.files().get(
+                    fileId=file_id, 
+                    fields='parents',
+                    supportsAllDrives=True
+                ).execute()
+                previous_parents = ",".join(file.get('parents', []))
+                
+                # Move the file to the new folder
+                self.drive_service.files().update(
+                    fileId=file_id,
+                    addParents=folder_id,
+                    removeParents=previous_parents,
+                    fields='id, parents',
+                    supportsAllDrives=True
+                ).execute()
+            except Exception as e:
+                st.warning(f"File created, but encountered an error moving it to the folder: {e}")
+        
+        return sh
 
     def open_by_url(self, url):
         return self.gspread_client.open_by_url(url)
@@ -107,10 +139,12 @@ def get_or_create_spreadsheet(sheet_name, folder_id=None):
     if not client: return None
 
     try:
+        # Now uses our bulletproof Drive API search
         sh = client.open(sheet_name, folder_id=folder_id)
         return sh.url
     except gspread.SpreadsheetNotFound:
         try:
+            # Now uses our bulletproof Drive API move command
             sh = client.create(sheet_name, folder_id=folder_id)
             return sh.url
         except Exception as e:
@@ -155,7 +189,6 @@ def append_batch_to_sheet(sheet_url, data_list):
         st.error(f"❌ Append Error: {e}")
         return False
 
-# Applied the backoff decorator here
 @with_exponential_backoff(max_retries=5)
 def overwrite_sheet_with_df(sheet_url, df):
     """
@@ -177,4 +210,3 @@ def overwrite_sheet_with_df(sheet_url, df):
     data_to_upload = [df_clean.columns.values.tolist()] + df_clean.values.tolist()
     worksheet.update(data_to_upload)
     return True
-    
