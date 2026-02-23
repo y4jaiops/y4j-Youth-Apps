@@ -16,7 +16,7 @@ from logic.logic_sheets import get_or_create_spreadsheet, append_batch_to_sheet
 from logic.logic_gemini import GEMINI_MODEL_NAME
 
 # 1. SETUP
-set_app_theme("jobs") 
+set_app_theme("jobscan") 
 user = login_required()
 genai.configure(api_key=st.secrets["gemini"]["api_key"])
 
