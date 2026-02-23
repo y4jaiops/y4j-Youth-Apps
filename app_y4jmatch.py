@@ -133,7 +133,11 @@ if match_mode == "Match per Candidate (Find Jobs)":
                 st.error("No jobs found in this location.")
             else:
                 with st.spinner(f"Gemini ({GEMINI_MODEL_NAME}) is looking for jobs for {selected_name}..."):
-                    jobs_json = jobs_pool[['Job Title', 'Company Name', 'Required Skills', 'Min Experience']].to_json(orient='records')
+                   # jobs_json = jobs_pool[['Job Title', 'Company Name', 'Required Skills', 'Min Experience']].to_json(orient='records')
+                    # Safely filter only the columns that actually exist in the job sheet
+                    desired_job_cols = ['Job Title', 'Company Name', 'Required Skills', 'Min Experience']
+                    available_job_cols = [col for col in desired_job_cols if col in jobs_pool.columns]
+                    jobs_json = jobs_pool[available_job_cols].to_json(orient='records')
                     profile_str = json.dumps(profile.to_dict())
                     
                     model = genai.GenerativeModel(GEMINI_MODEL_NAME)
@@ -229,7 +233,12 @@ else:
                 st.error("No candidates found in this location.")
             else:
                 with st.spinner(f"Gemini ({GEMINI_MODEL_NAME}) is sourcing candidates for {job_profile.get('Company Name')}..."):
-                    cands_json = cands_pool[['First Name', 'Last Name', 'Skills', 'State', 'Education', 'Disability Type']].to_json(orient='records')
+                  #  cands_json = cands_pool[['First Name', 'Last Name', 'Skills', 'State', 'Education', 'Disability Type']].to_json(orient='records')
+                    # Safely filter only the columns that actually exist in the candidate sheet
+                    # (Added 'Qualification' in case 'Education' is missing)
+                    desired_cand_cols = ['First Name', 'Last Name', 'Skills', 'State', 'Education', 'Qualification', 'Disability Type']
+                    available_cand_cols = [col for col in desired_cand_cols if col in cands_pool.columns]
+                    cands_json = cands_pool[available_cand_cols].to_json(orient='records')      
                     job_str = json.dumps(job_profile.to_dict())
                     
                     model = genai.GenerativeModel(GEMINI_MODEL_NAME)
