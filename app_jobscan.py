@@ -167,11 +167,17 @@ if 'extracted_jobs' in st.session_state:
         st.write("") # Spacer
         final_save = st.button("💾 Save All Jobs", type="primary", use_container_width=True)
 
-    # --- SAVE LOGIC ---
+# --- SAVE LOGIC ---
     if final_save:
         with st.spinner("Syncing to Google Sheets..."):
-            # Load Database URL
-            fid = st.secrets.get("youthjobs", {}).get("folder_id")
+            # Load Database URL - Change "jobscan" to exactly match your secrets.toml bracket [name]
+            fid = st.secrets.get("jobscan", {}).get("folder_id")
+            
+            # HARD STOP: Prevent saving to root if the ID is missing
+            if not fid:
+                st.error("❌ Folder ID missing! Check that your secrets.toml has a [jobscan] section with the folder_id.")
+                st.stop()
+
             url = get_or_create_spreadsheet(sheet_name, fid)
             
             if url:
