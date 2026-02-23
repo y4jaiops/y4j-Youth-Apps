@@ -127,7 +127,7 @@ if active_file["data"] is not None:
     else:
         st.markdown(f"**Document Loaded: {active_file['mime']}**")
     
-    default_cols = "First Name, Last Name, ID Type, ID Number, Email, Phone Number, Date Of Birth, Gender, Disability Type, Qualification,Skills, Experience years, City, State"
+    default_cols = "First Name, Last Name, ID Type, ID Number, Email, Phone Number, Date Of Birth, Gender, Disability Type, Qualification, Skills, Experience years, City, State"
 
     cols = st.text_area("Fields to Extract (comma separated)", value=default_cols).split(",")
     
@@ -185,21 +185,24 @@ if st.session_state["scanned_df"] is not None:
             st.rerun()
 
     st.divider()
-    
     st.markdown("**Finalize & Save:**")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        volunteer_email = user.get("email", "volunteer")
-        default_sheet_name = f"YouthScan_{volunteer_email}"
-        sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value=default_sheet_name)
     
-    with col2:
-        st.write("") 
-        st.write("") 
-        final_save = st.button("Save Batch to Google Drive", type="primary")
+    # Wrapped the final save elements in a form to preserve the state of the sheet name
+    with st.form("save_batch_form"):
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            # Added a more robust check in case the dictionary key exists but is empty
+            v_email = user.get("email") if user.get("email") else "volunteer"
+            default_sheet_name = f"YouthScan_{v_email}"
+            sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value=default_sheet_name)
         
+        with col2:
+            st.write("") 
+            st.write("") 
+            final_save = st.form_submit_button("Save Batch to Google Drive", type="primary")
+            
     if final_save:
-        with st.spinner("Saving all records to Google Drive..."):
+        with st.spinner(f"Saving all records to {sheet_name}..."):
             fid = st.secrets.get("youthscan", {}).get("folder_id")
             url = get_or_create_spreadsheet(sheet_name, fid)
             
