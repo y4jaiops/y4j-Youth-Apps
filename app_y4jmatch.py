@@ -156,4 +156,47 @@ with col_right:
                             with col_c_mail:
                                 if cand_email:
                                     subject = f"Job Opportunity: {m.get('title')} at {m.get('company')}"
-                                    body = f"Hi {profile.get('First Name')},\n\nWe found a match for you!\nRole: {m.get('title')}\nCompany: {m.get('company')}\n\nOur AI matched you because: \"{m.get('reason')}\"\n\nApply now?\n\
+                                    body = f"""Hi {profile.get('First Name')},
+
+We found a match for you!
+Role: {m.get('title')}
+Company: {m.get('company')}
+
+Our AI matched you because: "{m.get('reason')}"
+
+Apply now?
+
+- Youth4Jobs"""
+                                    
+                                    params = urllib.parse.urlencode({'subject': subject, 'body': body})
+                                    st.link_button("👤 Email Candidate", f"mailto:{cand_email}?{params}")
+                                else:
+                                    st.caption("🚫 No Candidate Email")
+
+                            # --- 2. EMAIL TO EMPLOYER (NEW FEATURE) ---
+                            with col_e_mail:
+                                emp_email = m.get('email', '')
+                                if emp_email and "@" in emp_email:
+                                    subject_emp = f"Candidate Profile: {profile.get('First Name')} for {m.get('title')}"
+                                    body_emp = f"""Hi {m.get('company')} Hiring Team,
+
+I am writing from Youth4Jobs. We have identified a strong candidate for your {m.get('title')} role.
+
+Name: {profile.get('First Name')} {profile.get('Last Name')}
+Skills: {profile.get('Skills')}
+Location: {profile.get('State')}
+
+Why they are a fit: {m.get('reason')}
+
+Please let us know if you would like to interview them.
+
+Best,
+Youth4Jobs Placement Team"""
+                                    
+                                    params_emp = urllib.parse.urlencode({'subject': subject_emp, 'body': body_emp})
+                                    st.link_button("🏢 Email Employer", f"mailto:{emp_email}?{params_emp}", type="primary")
+                                else:
+                                    st.caption("🚫 No Employer Email")
+                            
+                except Exception as e:
+                    st.error(f"AI Error: {e}")
