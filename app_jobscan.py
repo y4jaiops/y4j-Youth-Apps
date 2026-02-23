@@ -152,12 +152,27 @@ if 'extracted_jobs' in st.session_state:
         key="job_editor"
     )
 
+    st.divider()
+    st.markdown("**Finalize & Save:**")
+    
+    # --- DYNAMIC SHEET NAMING UI ---
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        volunteer_email = user.get("email", "volunteer")
+        default_sheet_name = f"JobScan_{volunteer_email}"
+        sheet_name = st.text_input("Google Sheet Name (Saving Destination)", value=default_sheet_name)
+    
+    with col2:
+        st.write("") # Spacer
+        st.write("") # Spacer
+        final_save = st.button("💾 Save All Jobs", type="primary", use_container_width=True)
+
     # --- SAVE LOGIC ---
-    if st.button("💾 Save All Jobs to Database", type="primary"):
+    if final_save:
         with st.spinner("Syncing to Google Sheets..."):
             # Load Database URL
             fid = st.secrets.get("youthjobs", {}).get("folder_id")
-            url = get_or_create_spreadsheet("YouthJobs_Master_DB", fid)
+            url = get_or_create_spreadsheet(sheet_name, fid)
             
             if url:
                 # Get data from editor
