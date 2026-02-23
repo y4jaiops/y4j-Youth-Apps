@@ -127,7 +127,8 @@ if active_file["data"] is not None:
     else:
         st.markdown(f"**Document Loaded: {active_file['mime']}**")
     
-    default_cols = "First Name, Last Name, ID Type, ID Number, Email, Phone Number, Date Of Birth, Gender, Disability Type, Qualification, Skills, Experience years, City, State"
+    default_cols = "First Name, Last Name, ID Type, ID Number, Email, Phone Number, Date Of Birth, Gender, Disability Type, Qualification, State"
+    # Skills, Experience years, City,
 
     cols = st.text_area("Fields to Extract (comma separated)", value=default_cols).split(",")
     
