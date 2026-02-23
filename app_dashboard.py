@@ -5,7 +5,11 @@ import time
 # 1. Custom Module Imports & Setup
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
-from logic.logic_sheets import init_google_sheet_client
+from logic.logic_sheets import (
+    init_google_sheet_client, 
+    get_or_create_spreadsheet, 
+    overwrite_sheet_with_df
+)
 
 # Initialize Theme and User Auth
 set_app_theme("admin")
@@ -136,21 +140,40 @@ with tab_youth:
         m2.metric("Active Volunteers", active_volunteers)
         m3.metric("Profiles w/ Disability Data", disability_count)
         
-        # Dataframe & Download
+        # Dataframe
         st.dataframe(filtered_youth, use_container_width=True)
-        
-        csv_youth = filtered_youth.to_csv(index=False).encode('utf-8')
         
         # Generate dynamic file name with today's date
         current_date = time.strftime("%Y-%m-%d")
+        csv_youth = filtered_youth.to_csv(index=False).encode('utf-8')
         
-        st.download_button(
-            label="Download YouthScan CSV",
-            data=csv_youth,
-            file_name=f"YouthScan_Filtered_Roster_{current_date}.csv",
-            mime="text/csv",
-            key="dl_youthscan_csv"
-        )
+        # Export & Save Buttons
+        col_dl_youth, col_save_youth = st.columns(2)
+        
+        with col_dl_youth:
+            st.download_button(
+                label="Download YouthScan CSV",
+                data=csv_youth,
+                file_name=f"YouthScan_Filtered_Roster_{current_date}.csv",
+                mime="text/csv",
+                key="dl_youthscan_csv",
+                use_container_width=True
+            )
+            
+        with col_save_youth:
+            if st.button("💾 Save to Google Drive", key="save_drive_youth", use_container_width=True):
+                roster_fid = st.secrets.get("youthscan", {}).get("roster_folder_id")
+                if not roster_fid:
+                    st.error("Roster folder ID missing in st.secrets for 'youthscan'.")
+                else:
+                    with st.spinner("Saving YouthScan Master Roster to Google Drive..."):
+                        try:
+                            sheet_name = f"YouthScan_Master_Roster_{current_date}"
+                            url = get_or_create_spreadsheet(sheet_name, roster_fid)
+                            overwrite_sheet_with_df(url, filtered_youth)
+                            st.success(f"Successfully saved **{sheet_name}** to Google Drive!")
+                        except Exception as e:
+                            st.error(f"Failed to save to Drive: {e}")
     else:
         st.info("No YouthScan data loaded. Click 'Sync YouthScan Data' to fetch from Drive.")
 
@@ -178,20 +201,39 @@ with tab_job:
         m1.metric("Total Jobs", total_jobs)
         m2.metric("Active Volunteers", active_job_volunteers)
         
-        # Dataframe & Download
+        # Dataframe
         st.dataframe(filtered_job, use_container_width=True)
-        
-        csv_job = filtered_job.to_csv(index=False).encode('utf-8')
         
         # Generate dynamic file name with today's date
         current_date = time.strftime("%Y-%m-%d")
+        csv_job = filtered_job.to_csv(index=False).encode('utf-8')
         
-        st.download_button(
-            label="Download JobScan CSV",
-            data=csv_job,
-            file_name=f"JobScan_Filtered_Roster_{current_date}.csv",
-            mime="text/csv",
-            key="dl_jobscan_csv"
-        )
+        # Export & Save Buttons
+        col_dl_job, col_save_job = st.columns(2)
+        
+        with col_dl_job:
+            st.download_button(
+                label="Download JobScan CSV",
+                data=csv_job,
+                file_name=f"JobScan_Filtered_Roster_{current_date}.csv",
+                mime="text/csv",
+                key="dl_jobscan_csv",
+                use_container_width=True
+            )
+            
+        with col_save_job:
+            if st.button("💾 Save to Google Drive", key="save_drive_job", use_container_width=True):
+                roster_fid = st.secrets.get("jobscan", {}).get("roster_folder_id")
+                if not roster_fid:
+                    st.error("Roster folder ID missing in st.secrets for 'jobscan'.")
+                else:
+                    with st.spinner("Saving JobScan Master Roster to Google Drive..."):
+                        try:
+                            sheet_name = f"JobScan_Master_Roster_{current_date}"
+                            url = get_or_create_spreadsheet(sheet_name, roster_fid)
+                            overwrite_sheet_with_df(url, filtered_job)
+                            st.success(f"Successfully saved **{sheet_name}** to Google Drive!")
+                        except Exception as e:
+                            st.error(f"Failed to save to Drive: {e}")
     else:
         st.info("No JobScan data loaded. Click 'Sync JobScan Data' to fetch from Drive.")
