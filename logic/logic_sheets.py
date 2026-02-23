@@ -165,9 +165,11 @@ def append_batch_to_sheet(sheet_url, data_list):
         st.error(f"❌ Append Error: {e}")
         return False
 
+
 def overwrite_sheet_with_df(sheet_url, df):
     """
     Completely clears and rewrites the sheet (For Edit Mode).
+    Safely handles Pandas/Numpy data types before uploading to Google Sheets.
     """
     client = init_google_sheet_client()
     if not client: return False
@@ -177,11 +179,25 @@ def overwrite_sheet_with_df(sheet_url, df):
         worksheet = sh.get_worksheet(0)
         
         worksheet.clear()
-        df_clean = df.fillna("") 
+        
+        # 1. Create a copy to avoid SettingWithCopyWarning
+        df_clean = df.copy()
+        
+        # 2. Fill NA/NaN values with empty strings
+        df_clean = df_clean.fillna("")
+        
+        # 3. Convert all columns to strings to avoid numpy JSON serialization errors
+        # (Google Sheets will automatically auto-detect numbers and dates upon insertion)
+        df_clean = df_clean.astype(str)
+        
+        # 4. Prepare data for upload
         data_to_upload = [df_clean.columns.values.tolist()] + df_clean.values.tolist()
+        
+        # 5. Update the sheet
         worksheet.update(data_to_upload)
         return True
         
     except Exception as e:
         st.error(f"❌ Save Error: {e}")
         return False
+
