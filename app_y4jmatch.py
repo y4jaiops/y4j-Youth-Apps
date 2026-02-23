@@ -17,6 +17,12 @@ genai.configure(api_key=st.secrets["gemini"]["api_key"])
 
 st.write(f"👋 Hi **{user['name']}**! Let's match candidates to jobs.")
 
+# Initialize session state variables to hold our data
+if 'df_candidates' not in st.session_state:
+    st.session_state.df_candidates = pd.DataFrame()
+if 'df_jobs' not in st.session_state:
+    st.session_state.df_jobs = pd.DataFrame()
+
 # 2. CONFIGURE & LOAD DATABASES (SUPPLY & DEMAND)
 st.subheader("📂 Data Sources")
 st.write("Confirm or edit the Google Sheets names to load data from:")
@@ -25,6 +31,20 @@ st.write("Confirm or edit the Google Sheets names to load data from:")
 v_email = user.get("email", "volunteer")
 default_cand_sheet = f"YouthScan_{v_email}"
 default_job_sheet = f"JobScan_{v_email}"
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_data(c_sheet, j_sheet):
+    # Load Candidates (Supply)
+    scan_fid = st.secrets.get("youthscan", {}).get("folder_id")
+    scan_url = get_or_create_spreadsheet(c_sheet, scan_fid)
+    df_c = pd.DataFrame(read_data_from_sheet(scan_url)) if scan_url else pd.DataFrame()
+    
+    # Load Jobs (Demand) - Updated to use "jobscan" secret
+    jobs_fid = st.secrets.get("jobscan", {}).get("folder_id")
+    jobs_url = get_or_create_spreadsheet(j_sheet, jobs_fid)
+    df_j = pd.DataFrame(read_data_from_sheet(jobs_url)) if jobs_url else pd.DataFrame()
+    
+    return df_c, df_j
 
 # Use a form so the app doesn't reload on every single keystroke while editing
 with st.form("sheet_names_form"):
@@ -36,26 +56,26 @@ with st.form("sheet_names_form"):
     
     submit_sheets = st.form_submit_button("Fetch Data")
 
-@st.cache_data(ttl=60, show_spinner=False)
-def load_data(c_sheet, j_sheet):
-    # Load Candidates (Supply)
-    scan_fid = st.secrets.get("youthscan", {}).get("folder_id")
-    scan_url = get_or_create_spreadsheet(c_sheet, scan_fid)
-    df_c = pd.DataFrame(read_data_from_sheet(scan_url)) if scan_url else pd.DataFrame()
-    
-    # Load Jobs (Demand)
-    jobs_fid = st.secrets.get("jobscan", {}).get("folder_id")
-    jobs_url = get_or_create_spreadsheet(j_sheet, jobs_fid)
-    df_j = pd.DataFrame(read_data_from_sheet(jobs_url)) if jobs_url else pd.DataFrame()
-    
-    return df_c, df_j
+# Only fetch the data when the user explicitly clicks the button
+if submit_sheets:
+    with st.spinner(f"Syncing databases from '{cand_sheet_name}' & '{job_sheet_name}'..."):
+        # Fetch the data
+        fetched_c, fetched_j = load_data(cand_sheet_name, job_sheet_name)
+        
+        # Save to session state so it persists
+        st.session_state.df_candidates = fetched_c
+        st.session_state.df_jobs = fetched_j
+        
+        # Display the counts immediately below the form
+        st.success(f"✅ Loaded **{len(fetched_c)}** candidates and **{len(fetched_j)}** jobs.")
 
-with st.spinner(f"Syncing databases from '{cand_sheet_name}' & '{job_sheet_name}'..."):
-    df_candidates, df_jobs = load_data(cand_sheet_name, job_sheet_name)
+# Assign session state data back to local variables for the rest of the app to use
+df_candidates = st.session_state.df_candidates
+df_jobs = st.session_state.df_jobs
 
 # 3. CHECK DATA HEALTH
 if df_candidates.empty or df_jobs.empty:
-    st.warning("⚠️ Waiting for data... Ensure you have scanned at least one Candidate and one Job.")
+    st.info("👆 Please verify the sheet names above and click 'Fetch Data' to begin.")
     st.stop()
 
 # 4. MATCHING INTERFACE
