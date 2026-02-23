@@ -11,7 +11,7 @@ from logic.logic_sheets import get_or_create_spreadsheet, read_data_from_sheet
 from logic.logic_gemini import GEMINI_MODEL_NAME
 
 # 1. SETUP
-set_app_theme("match") # 🔴 Red/Magenta Vibe
+set_app_theme("y4jmatch") # 🔴 Red/Magenta Vibe
 user = login_required()
 genai.configure(api_key=st.secrets["gemini"]["api_key"])
 
