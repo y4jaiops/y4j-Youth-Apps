@@ -7,7 +7,7 @@ from logic.auth_user import login_required
 from logic.logic_sheets import get_or_create_spreadsheet, read_data_from_sheet, overwrite_sheet_with_df
 
 # 1. SETUP
-set_app_theme("Communicate") 
+set_app_theme("youthcomm") 
 user = login_required()
 
 st.title("Youth Communication Manager")
