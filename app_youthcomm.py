@@ -12,6 +12,7 @@ user = login_required()
 
 st.title("Youth Communication Manager")
 st.write(f"Logged in as: **{user['name']}**")
+st.write(f"👋 Hi **{user['name']}**! Let's message to candidates.")
 
 # --- CONFIGURATION ---
 SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" 
