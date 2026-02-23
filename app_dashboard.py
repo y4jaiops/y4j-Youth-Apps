@@ -19,29 +19,27 @@ if user.get("email") not in ADMIN_EMAILS:
     st.stop()
 
 # 3. Data Syncing Function
-def sync_volunteer_data(file_prefix):
+def sync_volunteer_data(file_prefix, secret_key):
     """
     Scans the specified Google Drive folder for files matching the prefix,
     extracts records, and appends the volunteer's email to a new column.
     """
     client = init_google_sheet_client()
-    folder_id = st.secrets.get("youthscan", {}).get("folder_id")
+    
+    # Dynamically fetch the correct folder ID based on the passed secret_key
+    folder_id = st.secrets.get(secret_key, {}).get("folder_id")
     
     if not folder_id:
-        st.error("Drive folder ID is missing from st.secrets.")
+        st.error(f"Drive folder ID is missing from st.secrets for [{secret_key}].")
         return pd.DataFrame()
 
     all_records = []
     
     with st.spinner(f"Scanning Drive for {file_prefix} files..."):
-        # Note: Implementation depends heavily on the Google API wrapper being used.
-        # This assumes the client has a method to query files by parent folder.
         try:
             query = f"'{folder_id}' in parents and name contains '{file_prefix}' and trashed=false"
-            # Replace 'list_files_by_query' with your exact client method for querying Drive
             files = client.list_files_by_query(query) 
         except AttributeError:
-            # Fallback if the standard gspread client is used without a custom wrapper
             st.warning("Using fallback file listing. Ensure your client supports Drive queries.")
             files = client.list_spreadsheet_files(title=file_prefix)
 
@@ -58,14 +56,11 @@ def sync_volunteer_data(file_prefix):
             
             if file_name.startswith(file_prefix):
                 try:
-                    # Open sheet by ID and fetch records
                     sheet = client.open_by_key(file_id).sheet1
                     records = sheet.get_all_records()
                     
-                    # Extract email from filename (e.g., "YouthScan_volunteer@email.com" -> "volunteer@email.com")
                     volunteer_email = file_name.replace(file_prefix, "").strip()
                     
-                    # Append 'Scanned By' to each row
                     for row in records:
                         row["Scanned By"] = volunteer_email
                         
@@ -73,12 +68,12 @@ def sync_volunteer_data(file_prefix):
                 except Exception as e:
                     st.error(f"Failed to read {file_name}: {e}")
             
-            # Update progress
             progress_bar.progress((i + 1) / total_files)
             
         progress_bar.empty()
         
     return pd.DataFrame(all_records)
+
 
 # 4. Dashboard UI Layout & State Management
 if "youthscan_df" not in st.session_state:
