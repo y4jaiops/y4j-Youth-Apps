@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import time
+import random
+import base64
+from functools import wraps
 
 # 1. Custom Module Imports & Setup
 from logic.style_manager import set_app_theme
@@ -26,12 +29,47 @@ if user.get("email") not in ADMIN_EMAILS:
 
 # Helper Function for Visual and Audio Feedback
 def trigger_success_feedback():
-    """Triggers the balloons animation and plays the success chime."""
+    """Triggers the balloons animation and plays an invisible success chime reliably."""
     st.balloons()
     try:
-        st.audio("koiroylers-awesome-notification-351720.mp3", autoplay=True)
-    except Exception:
+        # Read the audio file and encode it to base64
+        with open("koiroylers-awesome-notification-351720.mp3", "rb") as f:
+            data = f.read()
+            b64 = base64.b64encode(data).decode()
+        
+        # Inject an invisible HTML audio tag with a unique ID to force autoplay every time
+        unique_id = str(time.time()).replace('.', '')
+        md = f"""
+            <audio id="{unique_id}" autoplay="true" style="display:none;">
+            <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+            </audio>
+            """
+        st.markdown(md, unsafe_allow_html=True)
+    except Exception as e:
+        # Silently fail if the audio file is missing so it doesn't break the app
         pass
+
+# --- EXPONENTIAL BACKOFF DECORATOR ---
+def with_exponential_backoff(max_retries=5, base_delay=2):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if "429" in error_msg or "quota" in error_msg:
+                        if attempt < max_retries - 1:
+                            sleep_time = (base_delay ** attempt) + random.uniform(0, 1)
+                            st.warning(f"⏳ API Quota reached. Cooling down for {sleep_time:.1f}s before retrying (Attempt {attempt+1}/{max_retries})...")
+                            time.sleep(sleep_time)
+                        else:
+                            raise e
+                    else:
+                        raise e
+        return wrapper
+    return decorator
 
 # 3. Data Syncing Function
 @with_exponential_backoff(max_retries=5)
