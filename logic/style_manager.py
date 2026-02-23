@@ -2,11 +2,11 @@
 import streamlit as st
 
 THEMES = {
-    "scan": {"color": "#FFA500", "icon": "📸", "title": "YouthScan"},   # Orange
-    "profile": {"color": "#1E90FF", "icon": "🗂️", "title": "YouthProfile"}, # Blue
-    "prep": {"color": "#800080", "icon": "🎓", "title": "YouthPrep"},    # Purple
-    "jobs": {"color": "#228B22", "icon": "💼", "title": "YouthJobs"},    # Green
-    "match": {"color": "#FF00FF", "icon": "🤝", "title": "YouthMatch"},  # Magenta
+    "youthscan": {"color": "#FFA500", "icon": "📸", "title": "YouthScan"},  # Orange
+    "youthcomm": {"color": "#800080", "icon": "🎓", "title": "YouthComm"},  # Purple
+    "jobscan": {"color": "#228B22", "icon": "💼", "title": "JobScan"},      # Green
+    "jobcomm": {"color": "#1E90FF", "icon": "🗂️", "title": "JobComm"},      # Blue
+    "y4jmatch": {"color": "#FF00FF", "icon": "🤝", "title": "Y4J-Match"},      # Magenta
 }
 
 def set_app_theme(app_code):
