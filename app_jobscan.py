@@ -192,8 +192,18 @@ if 'extracted_jobs' in st.session_state:
                 # Batch Upload
                 if append_batch_to_sheet(url, final_data):
                     st.toast(f"🎉 Saved {len(final_data)} jobs!", icon="✅")
+                    
+                    # Visual Feedback
+                    st.balloons() 
+                    
+                    # Audio Feedback
+                    try:
+                        st.audio("koiroylers-awesome-notification-351720.mp3", autoplay=True)
+                    except Exception as e:
+                        pass 
+                        
                     del st.session_state['extracted_jobs']
-                    time.sleep(1)
+                    time.sleep(2.5)
                     st.rerun()
                 else:
                     st.error("❌ Save failed. Check logs.")
