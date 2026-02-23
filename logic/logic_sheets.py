@@ -2,6 +2,7 @@ import streamlit as st
 import gspread
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
 
 # --- CONFIGURATION ---
 SCOPES = [
@@ -9,10 +10,55 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+class Y4JGoogleClient:
+    """
+    A wrapper class that combines gspread for spreadsheet manipulation 
+    and the Google Drive API for advanced file querying.
+    """
+    def __init__(self, creds):
+        # Initialize gspread client
+        self.gspread_client = gspread.authorize(creds)
+        # Initialize Google Drive v3 API client
+        self.drive_service = build('drive', 'v3', credentials=creds)
+
+    # --- Drive API Methods ---
+    def list_files_by_query(self, query):
+        """
+        Executes a custom query against the Google Drive API.
+        Returns a list of file dictionaries containing 'id' and 'name'.
+        """
+        results = self.drive_service.files().list(
+            q=query,
+            spaces='drive',
+            fields='files(id, name)',
+            pageSize=1000
+        ).execute()
+        
+        return results.get('files', [])
+
+    # --- Gspread Pass-Through Methods ---
+    def open_by_key(self, file_id):
+        return self.gspread_client.open_by_key(file_id)
+
+    def open(self, title, folder_id=None):
+        if folder_id:
+            return self.gspread_client.open(title, folder_id=folder_id)
+        return self.gspread_client.open(title)
+
+    def create(self, title, folder_id=None):
+        if folder_id:
+            return self.gspread_client.create(title, folder_id=folder_id)
+        return self.gspread_client.create(title)
+
+    def open_by_url(self, url):
+        return self.gspread_client.open_by_url(url)
+
+@st.cache_resource(show_spinner="Connecting to Google Workspace...")
 def init_google_sheet_client():
     """
     Authenticate using OAuth 2.0 Refresh Token (Acts as the User, not a Service Account).
-    This bypasses Service Account storage quotas.
+    This bypasses Service Account storage quotas and returns a unified client
+    for both Sheets and Drive API operations.
     """
     try:
         # Check if we have the new Oauth secrets
@@ -36,9 +82,8 @@ def init_google_sheet_client():
         if not creds.valid:
             creds.refresh(Request())
 
-        # Authorize gspread
-        client = gspread.authorize(creds)
-        return client
+        # Return the wrapper client containing both gspread and drive APIs
+        return Y4JGoogleClient(creds)
 
     except Exception as e:
         st.error(f"❌ OAuth Error: {e}")
@@ -55,30 +100,22 @@ def get_or_create_spreadsheet(sheet_name, folder_id=None):
     try:
         # 1. Try to open existing sheet
         # We also pass folder_id here so it strictly opens files in the Y4J folder
-        if folder_id:
-            sh = client.open(sheet_name, folder_id=folder_id)
-        else:
-            sh = client.open(sheet_name)
-            
+        sh = client.open(sheet_name, folder_id=folder_id)
         return sh.url
         
     except gspread.SpreadsheetNotFound:
         # 2. Create new if not found
         try:
             # THE FIX: Create the sheet directly in the target folder
-            if folder_id:
-                sh = client.create(sheet_name, folder_id=folder_id)
-            else:
-                sh = client.create(sheet_name)
+            sh = client.create(sheet_name, folder_id=folder_id)
             
             # (Optional) You can automatically share this new sheet with an admin 
             # by un-commenting the line below and adding an admin email:
-            # sh.share('admin_email@example.com', perm_type='user', role='writer')
+            # sh.gspread_client.share('admin_email@example.com', perm_type='user', role='writer')
             
             return sh.url
             
         except Exception as e:
-            import streamlit as st
             st.error(f"❌ Error creating sheet: {e}")
             return None
 
