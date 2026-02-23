@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import time
 
 # 1. Custom Module Imports & Setup
 from logic.style_manager import set_app_theme
@@ -74,7 +75,6 @@ def sync_volunteer_data(file_prefix, secret_key):
         
     return pd.DataFrame(all_records)
 
-
 # 4. Dashboard UI Layout & State Management
 if "youthscan_df" not in st.session_state:
     st.session_state["youthscan_df"] = pd.DataFrame()
@@ -111,7 +111,8 @@ with tab_youth:
     col_sync, _ = st.columns([1, 4])
     with col_sync:
         if st.button("Sync YouthScan Data", key="sync_youthscan", use_container_width=True):
-            st.session_state["youthscan_df"] = sync_volunteer_data("YouthScan_")
+            # Passing the correct secret_key 'youthscan'
+            st.session_state["youthscan_df"] = sync_volunteer_data("YouthScan_", "youthscan")
             st.rerun()
 
     df_youth = st.session_state["youthscan_df"]
@@ -139,10 +140,14 @@ with tab_youth:
         st.dataframe(filtered_youth, use_container_width=True)
         
         csv_youth = filtered_youth.to_csv(index=False).encode('utf-8')
+        
+        # Generate dynamic file name with today's date
+        current_date = time.strftime("%Y-%m-%d")
+        
         st.download_button(
             label="Download YouthScan CSV",
             data=csv_youth,
-            file_name="YouthScan_Filtered_Roster.csv",
+            file_name=f"YouthScan_Filtered_Roster_{current_date}.csv",
             mime="text/csv",
             key="dl_youthscan_csv"
         )
@@ -154,7 +159,8 @@ with tab_job:
     col_sync_job, _ = st.columns([1, 4])
     with col_sync_job:
         if st.button("Sync JobScan Data", key="sync_jobscan", use_container_width=True):
-            st.session_state["jobscan_df"] = sync_volunteer_data("JobScan_")
+            # Passing the correct secret_key 'jobscan'
+            st.session_state["jobscan_df"] = sync_volunteer_data("JobScan_", "jobscan")
             st.rerun()
 
     df_job = st.session_state["jobscan_df"]
@@ -176,10 +182,14 @@ with tab_job:
         st.dataframe(filtered_job, use_container_width=True)
         
         csv_job = filtered_job.to_csv(index=False).encode('utf-8')
+        
+        # Generate dynamic file name with today's date
+        current_date = time.strftime("%Y-%m-%d")
+        
         st.download_button(
             label="Download JobScan CSV",
             data=csv_job,
-            file_name="JobScan_Filtered_Roster.csv",
+            file_name=f"JobScan_Filtered_Roster_{current_date}.csv",
             mime="text/csv",
             key="dl_jobscan_csv"
         )
