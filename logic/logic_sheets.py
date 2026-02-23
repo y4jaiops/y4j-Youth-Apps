@@ -41,6 +41,7 @@ def with_exponential_backoff(max_retries=5, base_delay=2):
         return wrapper
     return decorator
 
+
 class Y4JGoogleClient:
     """
     A wrapper class that combines gspread for spreadsheet manipulation 
@@ -49,6 +50,18 @@ class Y4JGoogleClient:
     def __init__(self, creds):
         self.gspread_client = gspread.authorize(creds)
         self.drive_service = build('drive', 'v3', credentials=creds)
+
+    def list_files_by_query(self, query):
+        """Fetches files matching a specific Drive query."""
+        results = self.drive_service.files().list(
+            q=query,
+            spaces='drive',
+            fields='files(id, name)',
+            pageSize=1000,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
+        ).execute()
+        return results.get('files', [])
 
     def get_file_id_by_name(self, title, folder_id=None):
         """Safely queries Drive to find the exact file inside the target folder."""
@@ -60,7 +73,7 @@ class Y4JGoogleClient:
             q=query,
             spaces='drive',
             fields='files(id, name)',
-            supportsAllDrives=True, # Critical if using Shared Drives
+            supportsAllDrives=True, 
             includeItemsFromAllDrives=True
         ).execute()
         
@@ -73,17 +86,18 @@ class Y4JGoogleClient:
         if file_id:
             return self.gspread_client.open_by_key(file_id)
         raise gspread.SpreadsheetNotFound(f"Spreadsheet '{title}' not found in folder.")
+        
+    def open_by_key(self, file_id):
+        """Opens a spreadsheet directly using its Drive file ID."""
+        return self.gspread_client.open_by_key(file_id)
 
     def create(self, title, folder_id=None):
         """Creates the sheet and explicitly forces it into the target folder."""
-        # 1. Create the sheet (defaults to root)
         sh = self.gspread_client.create(title)
         
-        # 2. Explicitly move it to the target folder using Drive API
         if folder_id:
             file_id = sh.id
             try:
-                # Retrieve the existing parents to remove
                 file = self.drive_service.files().get(
                     fileId=file_id, 
                     fields='parents',
@@ -91,7 +105,6 @@ class Y4JGoogleClient:
                 ).execute()
                 previous_parents = ",".join(file.get('parents', []))
                 
-                # Move the file to the new folder
                 self.drive_service.files().update(
                     fileId=file_id,
                     addParents=folder_id,
@@ -106,6 +119,8 @@ class Y4JGoogleClient:
 
     def open_by_url(self, url):
         return self.gspread_client.open_by_url(url)
+
+
 
 @st.cache_resource(show_spinner="Connecting to Google Workspace...")
 def init_google_sheet_client():
