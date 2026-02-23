@@ -44,7 +44,7 @@ def load_data(c_sheet, j_sheet):
     df_c = pd.DataFrame(read_data_from_sheet(scan_url)) if scan_url else pd.DataFrame()
     
     # Load Jobs (Demand)
-    jobs_fid = st.secrets.get("youthjobs", {}).get("folder_id")
+    jobs_fid = st.secrets.get("jobscan", {}).get("folder_id")
     jobs_url = get_or_create_spreadsheet(j_sheet, jobs_fid)
     df_j = pd.DataFrame(read_data_from_sheet(jobs_url)) if jobs_url else pd.DataFrame()
     
