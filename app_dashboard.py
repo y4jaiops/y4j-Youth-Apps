@@ -1,122 +1,192 @@
 import streamlit as st
 import pandas as pd
+
+# 1. Custom Module Imports & Setup
 from logic.style_manager import set_app_theme
 from logic.auth_user import login_required
 from logic.logic_sheets import init_google_sheet_client
 
-# 1. SETUP
+# Initialize Theme and User Auth
 set_app_theme("admin")
 user = login_required()
 
-st.title("📊 Y4J Admin Dashboard")
-st.write(f"Welcome back, **{user['name']}**. Here is your master view of all volunteer data.")
+# 2. Admin Authorization
+ADMIN_EMAILS = ["shivasawant@gmail.com"]
 
-# --- SESSION STATE ---
-if "master_df" not in st.session_state:
-    st.session_state["master_df"] = None
+if user.get("email") not in ADMIN_EMAILS:
+    st.error("Access Denied")
+    st.warning("You do not have administrator privileges to view the Y4J Admin Dashboard.")
+    st.stop()
 
-# 2. DATA AGGREGATION LOGIC
-def sync_all_volunteer_data():
+# 3. Data Syncing Function
+def sync_volunteer_data(file_prefix):
+    """
+    Scans the specified Google Drive folder for files matching the prefix,
+    extracts records, and appends the volunteer's email to a new column.
+    """
     client = init_google_sheet_client()
-    if not client:
-        st.error("❌ Failed to connect to Google Sheets.")
-        return None
-        
-    fid = st.secrets.get("youthscan", {}).get("folder_id")
+    folder_id = st.secrets.get("youthscan", {}).get("folder_id")
     
-    with st.spinner("Scanning Drive for volunteer sheets..."):
+    if not folder_id:
+        st.error("Drive folder ID is missing from st.secrets.")
+        return pd.DataFrame()
+
+    all_records = []
+    
+    with st.spinner(f"Scanning Drive for {file_prefix} files..."):
+        # Note: Implementation depends heavily on the Google API wrapper being used.
+        # This assumes the client has a method to query files by parent folder.
         try:
-            # Fetch all spreadsheets in the target folder
-            all_files = client.list_spreadsheet_files(folder_id=fid)
+            query = f"'{folder_id}' in parents and name contains '{file_prefix}' and trashed=false"
+            # Replace 'list_files_by_query' with your exact client method for querying Drive
+            files = client.list_files_by_query(query) 
+        except AttributeError:
+            # Fallback if the standard gspread client is used without a custom wrapper
+            st.warning("Using fallback file listing. Ensure your client supports Drive queries.")
+            files = client.list_spreadsheet_files(title=file_prefix)
+
+        total_files = len(files)
+        if total_files == 0:
+            st.info(f"No files found starting with '{file_prefix}'.")
+            return pd.DataFrame()
+
+        progress_bar = st.progress(0)
+        
+        for i, file_meta in enumerate(files):
+            file_name = file_meta.get("name", "")
+            file_id = file_meta.get("id")
             
-            # Filter to only grab the YouthScan files we dynamically named
-            y4j_files = [f for f in all_files if f.get('name', '').startswith("YouthScan_")]
-            
-            if not y4j_files:
-                st.warning("No volunteer sheets found in the Y4J folder.")
-                return None
-                
-            all_records = []
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            # Loop through each volunteer's sheet and pull the data
-            for i, file_meta in enumerate(y4j_files):
-                status_text.text(f"Syncing: {file_meta['name']}...")
+            if file_name.startswith(file_prefix):
                 try:
-                    # Open the specific sheet by its ID for safety
-                    sh = client.open_by_key(file_meta['id'])
-                    # Assuming data is on the first sheet
-                    worksheet = sh.sheet1
+                    # Open sheet by ID and fetch records
+                    sheet = client.open_by_key(file_id).sheet1
+                    records = sheet.get_all_records()
                     
-                    # get_all_records() automatically handles headers and converts to dicts
-                    records = worksheet.get_all_records()
+                    # Extract email from filename (e.g., "YouthScan_volunteer@email.com" -> "volunteer@email.com")
+                    volunteer_email = file_name.replace(file_prefix, "").strip()
                     
-                    # Inject the volunteer email into the record so you know who scanned it!
-                    volunteer_email = file_meta['name'].replace("YouthScan_", "")
-                    for r in records:
-                        r["Scanned By"] = volunteer_email
-                        all_records.append(r)
+                    # Append 'Scanned By' to each row
+                    for row in records:
+                        row["Scanned By"] = volunteer_email
                         
+                    all_records.extend(records)
                 except Exception as e:
-                    st.error(f"Could not read {file_meta['name']}: {e}")
-                    
-                progress_bar.progress((i + 1) / len(y4j_files))
-                
-            status_text.text("✅ Sync complete!")
-            progress_bar.empty()
+                    st.error(f"Failed to read {file_name}: {e}")
             
-            if all_records:
-                return pd.DataFrame(all_records)
-            else:
-                return None
-                
-        except Exception as e:
-            st.error(f"❌ Error communicating with Google Drive: {e}")
-            return None
+            # Update progress
+            progress_bar.progress((i + 1) / total_files)
+            
+        progress_bar.empty()
+        
+    return pd.DataFrame(all_records)
 
-# 3. DASHBOARD UI
-col1, col2 = st.columns([3, 1])
+# 4. Dashboard UI Layout & State Management
+if "youthscan_df" not in st.session_state:
+    st.session_state["youthscan_df"] = pd.DataFrame()
+if "jobscan_df" not in st.session_state:
+    st.session_state["jobscan_df"] = pd.DataFrame()
 
-with col1:
-    st.markdown("Click the button to pull the latest candidate data from all volunteer sheets.")
-with col2:
-    if st.button("🔄 Sync Master Data", type="primary"):
-        st.session_state["master_df"] = sync_all_volunteer_data()
+# Combine unique volunteers from both datasets to populate the dynamic filter
+youth_vols = set(st.session_state["youthscan_df"].get("Scanned By", [])) if not st.session_state["youthscan_df"].empty else set()
+job_vols = set(st.session_state["jobscan_df"].get("Scanned By", [])) if not st.session_state["jobscan_df"].empty else set()
+all_volunteers = sorted(list(youth_vols.union(job_vols)))
 
-# 4. METRICS & DISPLAY
-if st.session_state["master_df"] is not None:
-    df = st.session_state["master_df"]
+# Sidebar
+st.sidebar.header("Filter Options")
+selected_volunteers = st.sidebar.multiselect(
+    "Filter by Volunteer (Scanned By)",
+    options=all_volunteers
+)
+
+def apply_volunteer_filter(df):
+    """Filters the dataframe based on sidebar multiselect."""
+    if df.empty:
+        return df
+    if selected_volunteers:
+        return df[df["Scanned By"].isin(selected_volunteers)]
+    return df
+
+# Create Tabs
+tab_youth, tab_job = st.tabs(["📋 YouthScan Roster", "💼 JobScan Roster"])
+
+# 5. Tab Contents
+
+# --- YOUTHSCAN TAB ---
+with tab_youth:
+    col_sync, _ = st.columns([1, 4])
+    with col_sync:
+        if st.button("Sync YouthScan Data", key="sync_youthscan", use_container_width=True):
+            st.session_state["youthscan_df"] = sync_volunteer_data("YouthScan_")
+            st.rerun()
+
+    df_youth = st.session_state["youthscan_df"]
     
-    st.divider()
-    
-    # Calculate top-level metrics
-    total_candidates = len(df)
-    unique_volunteers = df["Scanned By"].nunique() if "Scanned By" in df.columns else 0
-    
-    # Accessible Metric Cards
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Candidates Scanned", total_candidates)
-    m2.metric("Active Volunteers", unique_volunteers)
-    
-    # A dynamic metric if the column exists
-    if "Disability Type" in df.columns:
-        reported_disabilities = len(df[df["Disability Type"].str.strip() != "N/A"])
-        m3.metric("Profiles w/ Disability Data", reported_disabilities)
+    if not df_youth.empty:
+        filtered_youth = apply_volunteer_filter(df_youth)
+        
+        # Calculate Metrics
+        total_candidates = len(filtered_youth)
+        active_volunteers = filtered_youth["Scanned By"].nunique() if "Scanned By" in filtered_youth.columns else 0
+        
+        if "Disability Type" in filtered_youth.columns:
+            disability_count = len(filtered_youth[filtered_youth["Disability Type"] != "N/A"])
+        else:
+            disability_count = 0
+
+        # Display Metrics
+        st.markdown("### YouthScan Metrics")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Candidates", total_candidates)
+        m2.metric("Active Volunteers", active_volunteers)
+        m3.metric("Profiles w/ Disability Data", disability_count)
+        
+        # Dataframe & Download
+        st.dataframe(filtered_youth, use_container_width=True)
+        
+        csv_youth = filtered_youth.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Download YouthScan CSV",
+            data=csv_youth,
+            file_name="YouthScan_Filtered_Roster.csv",
+            mime="text/csv",
+            key="dl_youthscan_csv"
+        )
     else:
-        m3.metric("Status", "Up to Date")
+        st.info("No YouthScan data loaded. Click 'Sync YouthScan Data' to fetch from Drive.")
 
-    st.divider()
-    st.subheader("Master Candidate Roster")
+# --- JOBSCAN TAB ---
+with tab_job:
+    col_sync_job, _ = st.columns([1, 4])
+    with col_sync_job:
+        if st.button("Sync JobScan Data", key="sync_jobscan", use_container_width=True):
+            st.session_state["jobscan_df"] = sync_volunteer_data("JobScan_")
+            st.rerun()
+
+    df_job = st.session_state["jobscan_df"]
     
-    # Display the interactive dataframe
-    st.dataframe(df, use_container_width=True)
-    
-    # 5. EXPORT FUNCTIONALITY
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Download Master CSV",
-        data=csv,
-        file_name='Y4J_Master_Roster.csv',
-        mime='text/csv',
-    )
+    if not df_job.empty:
+        filtered_job = apply_volunteer_filter(df_job)
+        
+        # Calculate Metrics
+        total_jobs = len(filtered_job)
+        active_job_volunteers = filtered_job["Scanned By"].nunique() if "Scanned By" in filtered_job.columns else 0
+
+        # Display Metrics
+        st.markdown("### JobScan Metrics")
+        m1, m2 = st.columns(2)
+        m1.metric("Total Jobs", total_jobs)
+        m2.metric("Active Volunteers", active_job_volunteers)
+        
+        # Dataframe & Download
+        st.dataframe(filtered_job, use_container_width=True)
+        
+        csv_job = filtered_job.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Download JobScan CSV",
+            data=csv_job,
+            file_name="JobScan_Filtered_Roster.csv",
+            mime="text/csv",
+            key="dl_jobscan_csv"
+        )
+    else:
+        st.info("No JobScan data loaded. Click 'Sync JobScan Data' to fetch from Drive.")
