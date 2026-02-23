@@ -9,7 +9,7 @@ from logic.logic_gemini import parse_document_dynamic
 from logic.logic_sheets import get_or_create_spreadsheet, append_batch_to_sheet
 
 # 1. SETUP
-set_app_theme("scan")
+set_app_theme("youthscan")
 user = login_required()
 
 st.write(f"Hi **{user['name']}**! Ready to scan candidates?")
