@@ -11,8 +11,7 @@ set_app_theme("youthcomm")
 user = login_required()
 
 st.title("Youth Communication Manager")
-st.write(f"Logged in as: **{user['name']}**")
-st.write(f"👋 Hi **{user['name']}**! Let's message to candidates.")
+st.write(f"👋 Hi **{user['name']}**! Let's message candidates.")
 
 # --- CONFIGURATION ---
 SURVEY_LINK = "https://forms.gle/YOUR_ACTUAL_FORM_ID" 
@@ -36,11 +35,19 @@ def clean_phone_number(phone_raw):
         
     return clean
 
-# 3. LOAD DATA
-@st.cache_data(ttl=60)
-def load_candidates():
+# 3. CONFIGURE & LOAD DATA
+st.subheader("📂 Data Source")
+
+# Dynamically generate the default sheet name based on the logged-in user
+v_email = user.get("email") if user.get("email") else "volunteer"
+default_sheet_name = f"YouthScan_{v_email}"
+
+target_sheet_name = st.text_input("Candidate Sheet Name to Load:", value=default_sheet_name)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_candidates(sheet_name):
     fid = st.secrets.get("youthscan", {}).get("folder_id")
-    url = get_or_create_spreadsheet("YouthScan_Data", fid)
+    url = get_or_create_spreadsheet(sheet_name, fid)
     
     if url:
         data = read_data_from_sheet(url)
@@ -51,11 +58,12 @@ def load_candidates():
     return pd.DataFrame(), url
 
 # Load initial data
-df_candidates, sheet_url = load_candidates()
+with st.spinner(f"Loading data from '{target_sheet_name}'..."):
+    df_candidates, sheet_url = load_candidates(target_sheet_name)
 
 # 4. DASHBOARD INTERFACE
 if df_candidates.empty:
-    st.warning("No candidates found. Use 'YouthScan' to add people.")
+    st.warning(f"No candidates found in '{target_sheet_name}'. Use 'YouthScan' to add people or check the sheet name.")
 else:
     # A. METRICS
     col1, col2, col3 = st.columns(3)
